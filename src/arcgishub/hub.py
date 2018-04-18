@@ -12,16 +12,16 @@ class Hub:
     def __init__(self, url):
         self.url = url
        
-    def _enterprise_org_id(self):
+        def _enterprise_org_id(self):
         '''Return the Enterprise Organization Id for this hub'''
         org = GIS(self.url)
         e_org_id = org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
         return e_org_id
     
     def _format_date(self, date):
-        '''Return date in M/D/Y -- H:M:S format'''
+        '''Return date in M-D-Y -- H:M:S format'''
         epoch_time = str(date)[0: 10]
-        return datetime.datetime.fromtimestamp(float(epoch_time)).strftime('%m/%d/%Y -- %H:%M:%S')
+        return datetime.datetime.fromtimestamp(float(epoch_time)).strftime('%m-%d-%Y -- %H:%M:%S')
     
     def _days_between(self, d1, d2):
         '''Return number of days between two dates'''
@@ -77,6 +77,13 @@ class Hub:
                 pass
             all_events.append(event)
         return all_events
+    
+    def _temp_description(self,initiative):
+        '''Return a dictionary with title and description of a particular event'''
+        temp = {}
+        temp['title'] = initiative['title']
+        temp['description'] = initiative['description']
+        return temp
             
     def initiatives(self):
         '''Extract all initiatives for this Hub and return the response json'''
@@ -89,17 +96,51 @@ class Hub:
 
     def initiative_names(self):
         '''Extract a list of all Initiative names from within this Hub'''
-        data = self.get_all_initiatives()
-        count = len(data)
-        names = [data[i]['title'] for i in range(0,count)]
+        initiatives = self.initiatives()
+        count = len(initiatives)
+        names = [initiatives[i]['title'] for i in range(count)]
         return names
     
     def initiative_ids(self):
         '''Extract a list of all Initiative ids from within this Hub'''
-        data = self.get_all_initiatives()
-        count = len(data)
-        ids = [data[i]['id'] for i in range(count)]
+        initiatives = self.initiatives()
+        count = len(initiatives)
+        ids = [initiatives[i]['id'] for i in range(count)]
         return ids
+    
+    def initiative_description(self, name=None):
+        '''Return the description of the requested initiative, or for all of them'''
+        initiatives = self.initiatives()
+        result = []
+        if isinstance(name, str):
+            for i in range(len(initiatives)):
+                if name in initiatives[i]['title']:
+                    result.append(self._temp_description(initiatives[i]))
+        elif name==None:
+            for i in range(len(initiatives)):
+                result.append(self._temp_description(initiatives[i]))
+        return result
+    
+    def initiative_search(self, name=None, location=None, created=None, modified=None, tags=None):
+        '''Search for initiatives within Hubs based on certain parameters'''
+        initiatives = self.initiatives()
+        result = []
+        now = datetime.datetime.now().strftime('%m-%d-%Y -- %H:%M:%S')
+        for i in range(len(initiatives)):
+            if name!=None:
+                if name in initiatives[i]['title']:
+                    result.append(initiatives[i])
+            if created!=None:
+                diff_days = self._days_between(initiatives[i]['created'], now)
+                if created>=diff_days:
+                    result.append(initiatives[i])
+            if modified!=None:
+                diff_days = self._days_between(initiatives[i]['modified'], now)
+                if modified>=diff_days:
+                    result.append(initiatives[i])
+            if initiatives[i]['tags']==tags:
+                result.append(initiatives[i])
+        return result
     
     def events(self):
         '''Extract all events for this Hub and return the response json'''
@@ -116,25 +157,20 @@ class Hub:
     
     def event_names(self):
         '''Extract a list of all Event names from within this Hub'''
-        data = self.all_events()
+        data = self.events()
         count = len(data)
         names = [data[i]['title'] for i in range(count)]
         return names
     
-    def initiative_search(self, name=None, location=None, age=None, modified=None, tags=None):
-        '''Search for initiatives within Hubs based on certain parameters'''
-        initiatives = self.initiatives()
+    def event_description(self, name=None):
+        '''Return the description of the requested event, or for all of them'''
+        events = self.events()
         result = []
-        now = datetime.datetime.now().strftime('%m/%d/%Y -- %H:%M:%S')
-        for i in range(len(initiatives)):
-            if initiatives[i]['title']==name or initiatives[i]['tags']==tags:
-                result.append(initiatives[i])
-            if age!=None:
-                diff_days = self._days_between(initiatives[i]['created'], now)
-                if age==diff_days:
-                    result.append(initiatives[i])
-            if modified!=None:
-                diff_days = self._days_between(initiatives[i]['modified'], now)
-                if modified==diff_days:
-                    result.append(initiatives[i])
+        if isinstance(name, str):
+            for i in range(len(events)):
+                if name in events[i]['title']:
+                    result.append(self._temp_description(events[i]))
+        elif name==None:
+            for i in range(len(events)):
+                result.append(self._temp_description(events[i]))
         return result
