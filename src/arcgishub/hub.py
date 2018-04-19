@@ -1,18 +1,12 @@
 from arcgis.gis import *
-import datetime, time
+import datetime
 import requests
 import json
 
 class Hub:
-    """
-    Acceessing an individual hub and all that it contains
-
-    """
+    "Acceessing an individual hub and all that it contains"
     
-    def __init__(self, url):
-        self.url = url
-       
-        def _enterprise_org_id(self):
+    def _enterprise_org_id(self):
         '''Return the Enterprise Organization Id for this hub'''
         org = GIS(self.url)
         e_org_id = org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
@@ -25,8 +19,8 @@ class Hub:
     
     def _days_between(self, d1, d2):
         '''Return number of days between two dates'''
-        d1 = date(int(d1[6:10]), int(d1[0:2]), int(d1[3:5]))
-        d2 = date(int(d2[6:10]), int(d2[0:2]), int(d2[3:5]))
+        d1 = datetime.date(int(d1[6:10]), int(d1[0:2]), int(d1[3:5]))
+        d2 = datetime.date(int(d2[6:10]), int(d2[0:2]), int(d2[3:5]))
         return (d2 - d1).days
     
     def _initiative_object(self, data):
@@ -78,11 +72,11 @@ class Hub:
             all_events.append(event)
         return all_events
     
-    def _temp_description(self,initiative):
+    def _temp_description(self,element):
         '''Return a dictionary with title and description of a particular event'''
         temp = {}
-        temp['title'] = initiative['title']
-        temp['description'] = initiative['description']
+        temp['title'] = element['title']
+        temp['description'] = element['description']
         return temp
             
     def initiatives(self):
@@ -111,17 +105,28 @@ class Hub:
     def initiative_description(self, name=None):
         '''Return the description of the requested initiative, or for all of them'''
         initiatives = self.initiatives()
-        result = []
         if isinstance(name, str):
+            result = []
             for i in range(len(initiatives)):
                 if name in initiatives[i]['title']:
                     result.append(self._temp_description(initiatives[i]))
         elif name==None:
-            for i in range(len(initiatives)):
-                result.append(self._temp_description(initiatives[i]))
+            result = [self._temp_description(initiatives[i]) for i in range(len(initiatives))]
         return result
     
-    def initiative_search(self, name=None, location=None, created=None, modified=None, tags=None):
+    def event_description(self, name=None):
+        '''Return the description of the requested event, or for all of them'''
+        events = self.events()
+        if isinstance(name, str):
+            result = []
+            for i in range(len(events)):
+                if name in events[i]['title']:
+                    result.append(self._temp_description(events[i]))
+        elif name==None:
+            result = [self._temp_description(events[i]) for i in range(len(events))]
+        return result
+    
+    def initiative_search(self, name=None, created=None, modified=None, tags=None):
         '''Search for initiatives within Hubs based on certain parameters'''
         initiatives = self.initiatives()
         result = []
@@ -157,20 +162,34 @@ class Hub:
     
     def event_names(self):
         '''Extract a list of all Event names from within this Hub'''
-        data = self.events()
-        count = len(data)
-        names = [data[i]['title'] for i in range(count)]
+        events = self.events()
+        count = len(events)
+        names = [events[i]['title'] for i in range(count)]
         return names
     
-    def event_description(self, name=None):
-        '''Return the description of the requested event, or for all of them'''
+    def events_for_initiative(self, name):
+        '''Given the name of the initiative, return all its events'''
+        initiatives = self.initiatives()
         events = self.events()
         result = []
-        if isinstance(name, str):
-            for i in range(len(events)):
-                if name in events[i]['title']:
-                    result.append(self._temp_description(events[i]))
-        elif name==None:
-            for i in range(len(events)):
-                result.append(self._temp_description(events[i]))
+        init = [initiatives[i] for i in range(len(initiatives)) if name==initiatives[i]['title']]
+        for j in range(len(events)):
+            if init[0]['id']==events[j]['initiativeId']:
+                temp = {}
+                temp['title'] = events[j]['title']
+                temp['startDate'] = events[j]['startDate']
+                result.append(temp)
+        return result
+    
+    def event_search(self, name=None, location=None):
+        '''Search for initiatives within Hubs based on certain parameters'''
+        events = self.events()
+        result = []
+        for i in range(len(events)):
+            if name!=None:
+                if (name in events[i]['title']):
+                    result.append(events[i])
+            if location!=None:
+                if (location in events[i]['location']):
+                    result.append(events[i])
         return result
