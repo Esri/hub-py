@@ -17,8 +17,10 @@ Once installed, test it by launching an instance of a Jupyter Notebook and impor
 The first step to interacting with `arcgishub` is creating an instance of a Hub and exploring all that it contains.
 For instance:
 
-```  myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html")```
-```  myHub.initiatives()```
+```  
+myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html")
+myHub.initiatives()
+```
 
 fetches a list containing all the initiatives within this Hub. Click here for more information about the features supported.
 
