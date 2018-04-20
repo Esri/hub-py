@@ -5,6 +5,9 @@ import json
 
 class Hub:
     "Acceessing an individual hub and all that it contains"
+
+    def __init__(self, url):
+        self.url = url
     
     def _enterprise_org_id(self):
         '''Return the Enterprise Organization Id for this hub'''
