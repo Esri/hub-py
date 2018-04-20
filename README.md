@@ -1,4 +1,34 @@
-# hub-py
-Python interface to Hub. Pythonic way of using Hub
+# arcgishub
+This package serves as the Python interface to ArcGIS Hub. It intends to serve both, the city and community user-base of Hub by allowing automation of several Hub worksflows and simplifying the use of the Hub information model.
+This package is built to be used in the Jupyter Notebook development environment. 
 
-The intent is to build a Python package that automates several Hub processes. 
+### Steps to install
+
+Execute the following command in the terminal
+
+``` pip install git+https://github.com/esridc/hub-py.git ```
+
+Once installed, test it by launching an instance of a Jupyter Notebook and importing the package
+
+``` from arcgishub import * ```
+
+### Getting Started
+
+The first step to interacting with `arcgishub` is creating an instance of a Hub and exploring all that it contains.
+For instance:
+
+```  myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html")
+     myHub.initiatives()
+```
+
+fetches a list containing all the initiatives within this Hub. Click here for more information about the features supported.
+
+
+### Future versions will allow:
+
+1. To search for initiatives/events/indicators/apps across Hubs, instead of within a particular Hub.
+2. Searching for a Hub based on Name or Location.
+3. Searching for Hubs based on Initiatives adopted.
+4. Searching for intiiatives based on Indicators used.
+
+We encourage you to provide feedback/issues in implementation, under GitHub [issues](https://github.com/esridc/hub-py/issues) for this repo.
