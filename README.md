@@ -22,7 +22,7 @@ myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html")
 myHub.initiatives()
 ```
 
-fetches a list containing all the initiatives within this Hub. Click here for more information about the features supported.
+fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods-and-its-usage) for more information about the functionality supported.
 
 
 ### Future versions will allow:
