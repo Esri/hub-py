@@ -33,7 +33,7 @@ The first step to interacting with `arcgishub` is creating an instance of a Hub 
 For instance:
 
 ```  
-myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your community org
+myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your org
 myHub.initiatives()
 ```
 
