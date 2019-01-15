@@ -11,14 +11,13 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     
-    version='1.0.0',
+    version='1.0.1',
     description='ArcGIS Hub Python API',
     long_description='Python API to automate your Hub processes',
     #url='http://pypi.python.org/pypi/TowelStuff/',
     
     #Author details
     author='Esri',
-    #author_email='jrh@example.com',
 
     # Choose your license
     license='Proprietary License',
@@ -43,7 +42,7 @@ setup(
     ],
 
     # What does your project relate to?
-    keywords='gis geographic spatial hub',
+    keywords='gis geographic spatial hub arcgis',
 
     packages=find_packages(),
     

@@ -5,15 +5,34 @@ import json
 
 class Hub:
     "Acceessing an individual hub and all that it contains"
-
-    def __init__(self, url):
-        self.url = url
     
-    def _enterprise_org_id(self):
-        '''Return the Enterprise Organization Id for this hub'''
-        org = GIS(self.url)
-        e_org_id = org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
-        return e_org_id
+    def _get_org(self):
+        '''Returns the org associated with the URL'''
+        return GIS(self.url)
+    
+    def _get_portalHostname(self):
+        '''Returns the portal Hostname for this Organization'''
+        org = self._get_org()
+        return org.properties.portalHostname
+    
+    def _companion_org_id(self):
+        '''Return the Companion Organization Id for this hub'''
+        org = self._get_org()
+        try:
+            companion_org_id = org.properties.portalProperties.hub.settings.communityOrg.orgId
+        except AttributeError:
+            companion_org_id = org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
+        return companion_org_id1
+    
+    def _org_id(self):
+        '''Return the Organization Id for this hub'''
+        org = self._get_org()
+        try:
+            org_id = org.properties.id
+            return org_id
+        except AttributeError:
+            return "Invalid Hub"
+            sys.exit(0)
     
     def _format_date(self, date):
         '''Return date in M-D-Y -- H:M:S format'''
@@ -25,6 +44,12 @@ class Hub:
         d1 = datetime.date(int(d1[6:10]), int(d1[0:2]), int(d1[3:5]))
         d2 = datetime.date(int(d2[6:10]), int(d2[0:2]), int(d2[3:5]))
         return (d2 - d1).days
+    
+    def _get_data(self, url):
+        '''Return the response data in json'''
+        response = requests.get(url)
+        data = response.json()
+        return data
     
     def _initiative_object(self, data):
         '''Build a list of the initiative object'''
@@ -47,7 +72,7 @@ class Hub:
                 pass
             initiative['tags'] = tags
             all_initiatives.append(initiative)
-        return all_initiatives
+        return all_initiatives       
     
     def _event_object(self, data):
         '''Build a list of the event object'''
@@ -76,7 +101,14 @@ class Hub:
         return all_events
     
     def _temp_description(self,element):
-        '''Return a dictionary with title and description of a particular event'''
+        '''Return a dictionary with title and description of a particular initiative, event'''
+        temp = {}
+        temp['title'] = element['title']
+        temp['description'] = element['description']
+        return temp
+    
+    def _temp_id(self,element):
+        '''Return a dictionary with title and id of a particular initiative'''
         temp = {}
         temp['title'] = element['title']
         temp['description'] = element['description']
@@ -84,10 +116,10 @@ class Hub:
             
     def initiatives(self):
         '''Extract all initiatives for this Hub and return the response json'''
-        e_org_id = self._enterprise_org_id()
-        request_url = 'https://www.arcgis.com/sharing/rest/search?q=typekeywords:hubInitiative%20AND%20orgid:'+e_org_id+'&f=json&num=100'
-        response = requests.get(request_url)
-        data = response.json()
+        e_org_id = self._org_id()
+        host = self._get_portalHostname()
+        request_url = 'https://'+host+'/sharing/rest/search?q=typekeywords:hubInitiative%20AND%20orgid:'+e_org_id+'&f=json&num=100'
+        data = self._get_data(request_url)
         all_initiatives = self._initiative_object(data)
         return all_initiatives
 
@@ -115,8 +147,25 @@ class Hub:
                     result.append(self._temp_description(initiatives[i]))
         elif name==None:
             result = [self._temp_description(initiatives[i]) for i in range(len(initiatives))]
-        return result
+        return result  
     
+    def indicator_layers(self, initiative_id=None):
+        '''Returns all the indicator layers configured for this initiative'''
+        all_indicators = []
+        host = self._get_portalHostname()
+        request_url = 'https://'+host+'/sharing/rest/content/items/'+initiative_id+'/data?f=json'
+        data = self._get_data(request_url)
+        total = len(data['indicators'])
+        for i in range(total):
+            indicator = {}
+            path = data['indicators'][i]['source']
+            indicator['url'] = path['url']
+            indicator['itemId'] = path['itemId']
+            indicator['name'] = path['name']
+            all_indicators.append(indicator)         
+        return all_indicators 
+       
+   
     def event_description(self, name=None):
         '''Return the description of the requested event, or for all of them'''
         events = self.events()
@@ -152,14 +201,14 @@ class Hub:
     
     def events(self):
         '''Extract all events for this Hub and return the response json'''
-        e_org_id = self._enterprise_org_id()
-        request_url = 'https://www.arcgis.com/sharing/rest/search?q=typekeywords:hubEventsLayer View Service AND orgid:'+e_org_id+'&f=json&num=100'
-        response = requests.get(request_url)
-        data = response.json()
+        e_org_id = self._org_id()
+        host = self._get_portalHostname()
+        request_url = 'https://'+host+'/sharing/rest/search?q=typekeywords:hubEventsLayer View Service AND orgid:'+e_org_id+'&f=json&num=100'
+        data = self._get_data(request_url)
         events_layer = data['results'][0]['url']
         events_url = events_layer + '/0/query?where=1=1&f=json&outFields=*&returnGeometry=true'
-        response = requests.get(events_url)
-        events_data = response.json()
+        print(events_url)
+        events_data = self._get_data(events_url)
         all_events = self._event_object(events_data)
         return all_events 
     
