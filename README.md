@@ -12,6 +12,21 @@ Once installed, test it by launching an instance of Jupyter Notebook and importi
 
 ``` from arcgishub import * ```
 
+
+### Steps to upgrade package
+
+Execute the following command in the terminal
+
+``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
+
+Once installed, test it by launching an instance of Jupyter Notebook and importing the package
+
+``` from arcgishub import * ```
+
+Test if the version has been upgraded by following with the command
+
+``` arcgishub.__version__ ```
+
 ### Getting Started
 
 The first step to interacting with `arcgishub` is creating an instance of a Hub and exploring all that it contains.
