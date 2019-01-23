@@ -161,6 +161,7 @@ class Hub:
         total = len(data['indicators'])
         for i in range(total):
             indicator = {}
+            indicator['id'] = data['indicators'][i]['id']
             path = data['indicators'][i]['source']
             indicator['url'] = path['url']
             indicator['itemId'] = path['itemId']
@@ -181,12 +182,15 @@ class Hub:
             result = [self._temp_description(events[i]) for i in range(len(events))]
         return result
     
-    def initiative_search(self, name=None, created=None, modified=None, tags=None):
+    def initiative_search(self, initiative_id=None, name=None, created=None, modified=None, tags=None):
         '''Search for initiatives within Hubs based on certain parameters'''
         initiatives = self.initiatives()
         result = []
         now = datetime.datetime.now().strftime('%m-%d-%Y -- %H:%M:%S')
         for i in range(len(initiatives)):
+            if initiative_id!=None:
+                if initiative_id in initiatives[i]['id']:
+                    result.append(initiatives[i])
             if name!=None:
                 if name in initiatives[i]['title']:
                     result.append(initiatives[i])
@@ -236,11 +240,14 @@ class Hub:
                 result.append(temp)
         return result
     
-    def event_search(self, name=None, location=None):
+    def event_search(self, event_id=None, name=None, location=None):
         '''Search for initiatives within Hubs based on certain parameters'''
         events = self.events()
         result = []
         for i in range(len(events)):
+            if event_id!=None:
+                if (event_id in events[i]['id']):
+                    result.append(events[i])
             if name!=None:
                 if (name in events[i]['title']):
                     result.append(events[i])
