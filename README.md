@@ -10,7 +10,7 @@ Execute the following command in the terminal
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
-``` from arcgishub import * ```
+``` from arcgishub import hub ```
 
 
 ### Steps to upgrade package
@@ -21,7 +21,7 @@ Execute the following command in the terminal
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
-``` from arcgishub import * ```
+``` from arcgishub import hub ```
 
 Test if the version has been upgraded by following with the command
 
