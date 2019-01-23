@@ -11,7 +11,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     
-    version='1.0.1',
+    version='1.0.2',
     description='ArcGIS Hub Python API',
     long_description='Python API to automate your Hub processes',
     #url='http://pypi.python.org/pypi/TowelStuff/',
