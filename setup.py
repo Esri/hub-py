@@ -11,7 +11,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     
-    version='1.0.2',
+    version='1.0.3',
     description='ArcGIS Hub Python API',
     long_description='Python API to automate your Hub processes',
     #url='http://pypi.python.org/pypi/TowelStuff/',
@@ -42,7 +42,7 @@ setup(
     ],
 
     # What does your project relate to?
-    keywords='gis geographic spatial hub arcgis',
+    keywords='gis geographic spatial hub arcgis initiatives',
 
     packages=find_packages(),
     
