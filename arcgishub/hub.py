@@ -6,21 +6,20 @@ import json
 class Hub:
     "Acceessing an individual hub and all that it contains"
 
-    def __init__(self, url):
+    def __init__(self, url, username=None, password=None):
         self.url = url
-    
-    def _get_org(self):
-        '''Returns the org associated with the URL'''
-        return GIS(self.url)
-    
+        self._username = username
+        self._password = password
+        self.gis = GIS(self.url, self._username, self._password)
+
     def _get_portalHostname(self):
         '''Returns the portal Hostname for this Organization'''
-        org = self._get_org()
+        org = self.gis
         return org.properties.portalHostname
     
     def _companion_org_id(self):
         '''Return the Companion Organization Id for this hub'''
-        org = self._get_org()
+        org = self.gis
         try:
             companion_org_id = org.properties.portalProperties.hub.settings.communityOrg.orgId
         except AttributeError:
@@ -29,7 +28,7 @@ class Hub:
     
     def _org_id(self):
         '''Return the Organization Id for this hub'''
-        org = self._get_org()
+        org = self.gis
         try:
             org_id = org.properties.id
             return org_id
@@ -168,8 +167,18 @@ class Hub:
             indicator['name'] = path['name']
             all_indicators.append(indicator)         
         return all_indicators 
-       
-   
+    
+    def add_derived_indicator(self, initiative_id, indicator_object):
+        '''Publishes a derived indicator to your GIS and adds it to the initiative'''
+        host = self._get_portalHostname()
+        request_url = 'https://'+host+'/sharing/rest/content/items/'+initiative_id+'/data?f=json'
+        data = self._get_data(request_url)
+        data['indicators'].append(indicator_object)
+        initiative_data = json.dumps(data)
+        inititative_item = self.gis.content.get(initiative_id)
+        status = inititative_item.update(item_properties={'text': initiative_data})
+        return status
+        
     def event_description(self, name=None):
         '''Return the description of the requested event, or for all of them'''
         events = self.events()
@@ -190,7 +199,7 @@ class Hub:
         for i in range(len(initiatives)):
             if initiative_id!=None:
                 if initiative_id in initiatives[i]['id']:
-                    result.append(initiatives[i])
+                    result.append(initiatives[i]) 
             if name!=None:
                 if name in initiatives[i]['title']:
                     result.append(initiatives[i])
@@ -214,7 +223,7 @@ class Hub:
         data = self._get_data(request_url)
         events_layer = data['results'][0]['url']
         events_url = events_layer + '/0/query?where=1=1&f=json&outFields=*&returnGeometry=true'
-        print(events_url)
+        #print(events_url)
         events_data = self._get_data(events_url)
         all_events = self._event_object(events_data)
         return all_events 
