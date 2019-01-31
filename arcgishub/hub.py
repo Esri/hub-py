@@ -161,11 +161,21 @@ class Hub:
         for i in range(total):
             indicator = {}
             indicator['id'] = data['indicators'][i]['id']
-            path = data['indicators'][i]['source']
-            indicator['url'] = path['url']
-            indicator['itemId'] = path['itemId']
-            indicator['name'] = path['name']
-            all_indicators.append(indicator)         
+            try:
+                path = data['indicators'][i]['source']
+                indicator['url'] = path['url']
+                indicator['itemId'] = path['itemId']
+                indicator['name'] = path['name']
+                if len(path['mappings'])!=0:
+                    indicator['mappings'] =  []
+                    for key in range(len(path['mappings'])):
+                        temp = {}
+                        temp["id"] = path['mappings'][key]['id']
+                        temp["name"] = path['mappings'][key]['name']
+                        indicator['mappings'].append(temp)
+            except KeyError:
+                pass
+            all_indicators.append(indicator)
         return all_indicators 
     
     def add_derived_indicator(self, initiative_id, indicator_object):
