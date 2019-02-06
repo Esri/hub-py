@@ -6,7 +6,7 @@ This package is built to be used in the Jupyter Notebook development environment
 
 Execute the following command in the terminal
 
-``` pip install -e git+https://github.com/esridc/hub-py.git ```
+``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
