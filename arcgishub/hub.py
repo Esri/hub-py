@@ -1,6 +1,5 @@
-from arcgis.gis import *
-import datetime
-import requests
+from arcgis.gis import GIS
+from arcgis.features import FeatureLayer
 import json
 
 class Hub:
@@ -10,267 +9,179 @@ class Hub:
         self.url = url
         self._username = username
         self._password = password
-        self.gis = GIS(self.url, self._username, self._password)
-
-    def _get_portalHostname(self):
-        '''Returns the portal Hostname for this Organization'''
-        org = self.gis
-        return org.properties.portalHostname
+        self._org = GIS(self.url, self._username, self._password)
     
-    def _companion_org_id(self):
-        '''Return the Companion Organization Id for this hub'''
-        org = self.gis
+    @property
+    def orgs(self):
+        '''Get both org urls for particular hub'''
+        orglist = []
+        orglist.append(self.url)
         try:
-            companion_org_id = org.properties.portalProperties.hub.settings.communityOrg.orgId
+            companion_org_id = self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
         except AttributeError:
-            companion_org_id = org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
-        return companion_org_id1
+            companion_org_id = self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
+        orglist.append(companion_org_id)
+        return orglist
     
-    def _org_id(self):
-        '''Return the Organization Id for this hub'''
-        org = self.gis
+    def _all_events(self):
+        '''Fetches all initiatives for particular hub'''
+        events = []
+        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        _events_layer_url = _events_layer.url + '/0'
+        _events_data = FeatureLayer(_events_layer_url).query().features
+        for event in _events_data:
+            events.append(self._build_event_object(event))
+        return events
+     
+    def _all_indicators(self, initiative_id):
+        '''Fetches the indicators for given initiative'''
+        _initiative = self.initiative_get(initiative_id)
+        return _initiative.get_data()['indicators']
+    
+    def _build_event_object(self, eventdict):
+        '''Builds event object'''
+        event = {}
+        _path = eventdict.attributes
+        event['title'] = _path['title']
+        event['location'] = _path['location']
+        event['description'] = _path['description']
+        event['startDate'] = _path['startDate']
+        event['endDate'] = _path['endDate']
+        event['organizerName'] = _path['organizerName']
+        event['creator'] = _path['Creator']
+        event['capacity'] = _path['capacity']
+        event['attendance'] = _path['attendance']
+        event['status'] = _path['status']
+        event['isCancelled'] = _path['isCancelled']
+        event['siteId'] = _path['siteId']
+        event['initiativeId'] = _path['initiativeId']
         try:
-            org_id = org.properties.id
-            return org_id
-        except AttributeError:
-            return "Invalid Hub"
-            sys.exit(0)
+            event['geometry'] = eventdict.geometry
+        except:
+            pass
+        return event
+        
+    def _build_indicator_object(self, indicatordict):
+        '''Builds indicator object'''
+        indicator = {}
+        indicator['id'] = indicatordict['id']
+        try:
+            path = indicatordict['source']
+            indicator['url'] = path['url']
+            indicator['itemId'] = path['itemId']
+            indicator['name'] = path['name']
+            if len(path['mappings'])!=0:
+                indicator['mappings'] =  []
+                for key in range(len(path['mappings'])):
+                    _temp = {}
+                    _temp["id"] = path['mappings'][key]['id']
+                    _temp["name"] = path['mappings'][key]['name']
+                    indicator['mappings'].append(_temp)
+        except KeyError:
+            pass
+        return indicator
     
-    def _format_date(self, date):
-        '''Return date in M-D-Y -- H:M:S format'''
-        epoch_time = str(date)[0: 10]
-        return datetime.datetime.fromtimestamp(float(epoch_time)).strftime('%m-%d-%Y -- %H:%M:%S')
+    def event_search(self, initiative_id=None, title=None, location=None, organizerName=None):
+        '''Search for events'''
+        events = []
+        events = self._all_events()
+        if initiative_id!=None:
+            events = [event for event in events if event['initiativeId']==initiative_id]
+        if title!=None:
+            events = [event for event in events if event['title']==title]
+        if location!=None:
+            events = [event for event in events if location in event['location']]
+        if organizerName!=None:
+            events = [event for event in events if organizerName in event['organizerName']]
+        return events
     
-    def _days_between(self, d1, d2):
-        '''Return number of days between two dates'''
-        d1 = datetime.date(int(d1[6:10]), int(d1[0:2]), int(d1[3:5]))
-        d2 = datetime.date(int(d2[6:10]), int(d2[0:2]), int(d2[3:5]))
-        return (d2 - d1).days
+    def events_map(self):
+        '''Visualize events for a hub in an embedded webmap'''
+        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        event_map = self._org.map(zoomlevel=2)
+        event_map.basemap = 'dark-gray'
+        event_map.add_layer(_events_layer, {'title':'Event locations for this Hub','opacity':0.7})
+        return event_map
     
-    def _get_data(self, url):
-        '''Return the response data in json'''
-        response = requests.get(url)
-        data = response.json()
-        return data
-    
-    def _initiative_object(self, data):
-        '''Build a list of the initiative object'''
-        all_initiatives = []
-        total = data['total']
-        for i in range(total):
-            tags = []
-            initiative = {}
-            path = data['results'][i]
-            initiative['id'] = path['id']
-            initiative['owner'] = path['owner']
-            initiative['created'] = self._format_date(path['created'])
-            initiative['modified'] = self._format_date(path['modified'])
-            initiative['title'] = path['title']
-            initiative['description'] = path['description']
-            initiative['url'] = path['url']
-            try:
-                tags = [path['tags'][j] for j in range(len(path['tags']))]
-            except:
-                pass
-            initiative['tags'] = tags
-            all_initiatives.append(initiative)
-        return all_initiatives       
-    
-    def _event_object(self, data):
-        '''Build a list of the event object'''
-        all_events = []
-        total = len(data['features'])
-        for i in range(total):
-            event = {}
-            path = data['features'][i]['attributes']
-            event['title'] = path['title']
-            event['location'] = path['location']
-            event['description'] = path['description']
-            event['startDate'] = self._format_date(path['startDate'])
-            event['endDate'] = self._format_date(path['endDate'])
-            event['organizerName'] = path['organizerName']
-            event['capacity'] = path['capacity']
-            event['attendance'] = path['attendance']
-            event['status'] = path['status']
-            event['isCancelled'] = path['isCancelled']
-            event['siteId'] = path['siteId']
-            event['initiativeId'] = path['initiativeId']
-            try:
-                event['geometry'] = data['features'][i]['geometry']
-            except:
-                pass
-            all_events.append(event)
-        return all_events
-    
-    def _temp_description(self,element):
-        '''Return a dictionary with title and description of a particular initiative, event'''
-        temp = {}
-        temp['title'] = element['title']
-        temp['description'] = element['description']
-        return temp
-    
-    def _temp_id(self,element):
-        '''Return a dictionary with title and id of a particular initiative'''
-        temp = {}
-        temp['title'] = element['title']
-        temp['description'] = element['description']
-        return temp
-            
-    def initiatives(self):
-        '''Extract all initiatives for this Hub and return the response json'''
-        e_org_id = self._org_id()
-        host = self._get_portalHostname()
-        request_url = 'https://'+host+'/sharing/rest/search?q=typekeywords:hubInitiative%20AND%20orgid:'+e_org_id+'&f=json&num=100'
-        data = self._get_data(request_url)
-        all_initiatives = self._initiative_object(data)
-        return all_initiatives
-
-    def initiative_names(self):
-        '''Extract a list of all Initiative names from within this Hub'''
-        initiatives = self.initiatives()
-        count = len(initiatives)
-        names = [initiatives[i]['title'] for i in range(count)]
-        return names
-    
-    def initiative_ids(self):
-        '''Extract a list of all Initiative ids from within this Hub'''
-        initiatives = self.initiatives()
-        count = len(initiatives)
-        ids = [initiatives[i]['id'] for i in range(count)]
-        return ids
-    
-    def initiative_description(self, name=None):
-        '''Return the description of the requested initiative, or for all of them'''
-        initiatives = self.initiatives()
-        if isinstance(name, str):
-            result = []
-            for i in range(len(initiatives)):
-                if name in initiatives[i]['title']:
-                    result.append(self._temp_description(initiatives[i]))
-        elif name==None:
-            result = [self._temp_description(initiatives[i]) for i in range(len(initiatives))]
-        return result  
-    
-    def indicator_layers(self, initiative_id=None):
-        '''Returns all the indicator layers configured for this initiative'''
-        all_indicators = []
-        host = self._get_portalHostname()
-        request_url = 'https://'+host+'/sharing/rest/content/items/'+initiative_id+'/data?f=json'
-        data = self._get_data(request_url)
-        total = len(data['indicators'])
-        for i in range(total):
-            indicator = {}
-            indicator['id'] = data['indicators'][i]['id']
-            try:
-                path = data['indicators'][i]['source']
-                indicator['url'] = path['url']
-                indicator['itemId'] = path['itemId']
-                indicator['name'] = path['name']
-                if len(path['mappings'])!=0:
-                    indicator['mappings'] =  []
-                    for key in range(len(path['mappings'])):
-                        temp = {}
-                        temp["id"] = path['mappings'][key]['id']
-                        temp["name"] = path['mappings'][key]['name']
-                        indicator['mappings'].append(temp)
-            except KeyError:
-                pass
-            all_indicators.append(indicator)
-        return all_indicators 
-    
-    def add_derived_indicator(self, initiative_id, indicator_object):
-        '''Publishes a derived indicator to your GIS and adds it to the initiative'''
-        host = self._get_portalHostname()
-        request_url = 'https://'+host+'/sharing/rest/content/items/'+initiative_id+'/data?f=json'
-        data = self._get_data(request_url)
+    def indicator_add(self, initiative_id, indicator_object):
+        '''Adds a new indicator to given initiative'''
+        initiative = self.initiative_get(initiative_id)
+        data = initiative.get_data()
         data['indicators'].append(indicator_object)
         initiative_data = json.dumps(data)
-        inititative_item = self.gis.content.get(initiative_id)
-        status = inititative_item.update(item_properties={'text': initiative_data})
-        return status
+        return initiative.update(item_properties={'text': initiative_data})
+    
+    def indicator_delete(self, initiative_id, indicator_id):
+        '''Deletes a particular indicator for given initiative'''
+        initiative = self.initiative_get(initiative_id)
+        data = initiative.get_data()
+        data['indicators'] = list(filter(lambda indicator: indicator.get('id')!=indicator_id, data['indicators']))
+        initiative_data = json.dumps(data)
+        return initiative.update(item_properties={'text': initiative_data})
         
-    def event_description(self, name=None):
-        '''Return the description of the requested event, or for all of them'''
-        events = self.events()
-        if isinstance(name, str):
-            result = []
-            for i in range(len(events)):
-                if name in events[i]['title']:
-                    result.append(self._temp_description(events[i]))
-        elif name==None:
-            result = [self._temp_description(events[i]) for i in range(len(events))]
-        return result
+    def indicator_get(self, initiative_id, indicator_id):
+        '''Fetch an indicator based on id'''
+        indicators = self._all_indicators(initiative_id)
+        try:
+            for indicator in indicators:
+                if indicator['id']==indicator_id:
+                    return indicator
+        except:
+            return 'Indicator does not exist'
+        
+    def indicator_search(self, initiative_id, indicator_id=None, url=None, itemId=None, name=None):
+        '''Search for indicator'''
+        indicators = []
+        temp = self._all_indicators(initiative_id)
+        for indicator in temp:
+            indicators.append(self._build_indicator_object(indicator))
+        if indicator_id!=None:
+            indicators = [indicator for indicator in indicators if indicator['id']==indicator_id]
+        if url!=None:
+            indicators = [indicator for indicator in indicators if indicator['url']==url]
+        if itemId!=None:
+            indicators = [indicator for indicator in indicators if indicator['itemId']==itemId]
+        if name!=None:
+            indicators = [indicator for indicator in indicators if indicator['name']==name]
+        return indicators
     
-    def initiative_search(self, initiative_id=None, name=None, created=None, modified=None, tags=None):
-        '''Search for initiatives within Hubs based on certain parameters'''
-        initiatives = self.initiatives()
-        result = []
-        now = datetime.datetime.now().strftime('%m-%d-%Y -- %H:%M:%S')
-        for i in range(len(initiatives)):
-            if initiative_id!=None:
-                if initiative_id in initiatives[i]['id']:
-                    result.append(initiatives[i]) 
-            if name!=None:
-                if name in initiatives[i]['title']:
-                    result.append(initiatives[i])
-            if created!=None:
-                diff_days = self._days_between(initiatives[i]['created'], now)
-                if created>=diff_days:
-                    result.append(initiatives[i])
-            if modified!=None:
-                diff_days = self._days_between(initiatives[i]['modified'], now)
-                if modified>=diff_days:
-                    result.append(initiatives[i])
-            if initiatives[i]['tags']==tags:
-                result.append(initiatives[i])
-        return result
+    def initiative_add(self, initiative_properties, data=None, thumbnail=None, metadata=None, owner=None, folder=None):
+        '''Adding a new initiative'''
+        initiative_properties['typekeywords'] = "hubInitiative"
+        return self._org.content.add(initiative_properties, data, thumbnail, metadata, owner, folder)
     
-    def events(self):
-        '''Extract all events for this Hub and return the response json'''
-        e_org_id = self._org_id()
-        host = self._get_portalHostname()
-        request_url = 'https://'+host+'/sharing/rest/search?q=typekeywords:hubEventsLayer View Service AND orgid:'+e_org_id+'&f=json&num=100'
-        data = self._get_data(request_url)
-        events_layer = data['results'][0]['url']
-        events_url = events_layer + '/0/query?where=1=1&f=json&outFields=*&returnGeometry=true'
-        #print(events_url)
-        events_data = self._get_data(events_url)
-        all_events = self._event_object(events_data)
-        return all_events 
+    def initiative_delete(self, initiative_id, force=False, dry_run=False):
+        '''Deletes an initiative'''
+        initiative = self.initiative_get(initiative_id)
+        return initiative.delete(force, dry_run)
+        
+    def initiative_get(self, initiative_id):
+        '''Fetch an initiative based on id'''
+        initiative = self._org.content.get(initiative_id)
+        if initiative is not None:
+            if 'hubInitiative' not in initiative.typeKeywords:
+                return "Item is not a valid initiative or is inaccessible."
+            return initiative
+        return None
     
-    def event_names(self):
-        '''Extract a list of all Event names from within this Hub'''
-        events = self.events()
-        count = len(events)
-        names = [events[i]['title'] for i in range(count)]
-        return names
+    def initiative_search(self, initiative_id=None, title=None, owner=None, created=None, modified=None, tags=None):
+        '''Search for initiative'''
+        query = 'typekeywords:hubInitiative'
+        if initiative_id!=None:
+            query += ' AND id:'+initiative_id
+        if title!=None:
+            query += ' AND title:'+title
+        if owner!=None:
+            query += ' AND owner:'+owner
+        if created!=None:
+            query += ' AND created:'+created
+        if modified!=None:
+            query += ' AND modified:'+modified
+        if tags!=None:
+            query += ' AND tags:'+tags
+        return self._org.content.search(query=query, max_items=5000)
     
-    def events_for_initiative(self, name):
-        '''Given the name of the initiative, return all its events'''
-        initiatives = self.initiatives()
-        events = self.events()
-        result = []
-        init = [initiatives[i] for i in range(len(initiatives)) if name==initiatives[i]['title']]
-        for j in range(len(events)):
-            if init[0]['id']==events[j]['initiativeId']:
-                temp = {}
-                temp['title'] = events[j]['title']
-                temp['startDate'] = events[j]['startDate']
-                result.append(temp)
-        return result
-    
-    def event_search(self, event_id=None, name=None, location=None):
-        '''Search for initiatives within Hubs based on certain parameters'''
-        events = self.events()
-        result = []
-        for i in range(len(events)):
-            if event_id!=None:
-                if (event_id in events[i]['id']):
-                    result.append(events[i])
-            if name!=None:
-                if (name in events[i]['title']):
-                    result.append(events[i])
-            if location!=None:
-                if (location in events[i]['location']):
-                    result.append(events[i])
-        return result
+    def initiative_update(self, initiative_id, initiative_properties=None, data=None, thumbnail=None, metadata=None):
+        '''Update an initiative'''
+        initiative = self.initiative_get(initiative_id)
+        return initiative.update(initiative_properties, data, thumbnail, metadata)
