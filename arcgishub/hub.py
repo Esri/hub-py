@@ -2,8 +2,8 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 import json
 
-class Hub:
-    "Acceessing an individual hub and all that it contains"
+class Hub(object):
+    "Acceessing an individual hub and its events, indicators and initiatives"
 
     def __init__(self, url, username=None, password=None):
         self.url = url
@@ -80,6 +80,14 @@ class Hub:
         except KeyError:
             pass
         return indicator
+
+    def events_map(self):
+        '''Visualize events for a hub in an embedded map'''
+        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        event_map = self._org.map(zoomlevel=2)
+        event_map.basemap = 'dark-gray'
+        event_map.add_layer(_events_layer, {'title':'Event locations for this Hub','opacity':0.7})
+        return event_map
     
     def event_search(self, initiative_id=None, title=None, location=None, organizerName=None):
         '''Search for events'''
@@ -95,14 +103,6 @@ class Hub:
             events = [event for event in events if organizerName in event['organizerName']]
         return events
     
-    def events_map(self):
-        '''Visualize events for a hub in an embedded webmap'''
-        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
-        event_map = self._org.map(zoomlevel=2)
-        event_map.basemap = 'dark-gray'
-        event_map.add_layer(_events_layer, {'title':'Event locations for this Hub','opacity':0.7})
-        return event_map
-    
     def indicator_add(self, initiative_id, indicator_object):
         '''Adds a new indicator to given initiative'''
         initiative = self.initiative_get(initiative_id)
@@ -113,11 +113,19 @@ class Hub:
     
     def indicator_delete(self, initiative_id, indicator_id):
         '''Deletes a particular indicator for given initiative'''
+        _invalid_indicator = False
         initiative = self.initiative_get(initiative_id)
         data = initiative.get_data()
-        data['indicators'] = list(filter(lambda indicator: indicator.get('id')!=indicator_id, data['indicators']))
-        initiative_data = json.dumps(data)
-        return initiative.update(item_properties={'text': initiative_data})
+        for indicator in data['indicators']:
+            if indicator_id==indicator['id']:
+                _invalid_indicator = True
+                break
+            if _invalid_indicator:
+                data['indicators'] = list(filter(lambda indicator: indicator.get('id')!=indicator_id, data['indicators']))
+                initiative_data = json.dumps(data)
+                return initiative.update(item_properties={'text': initiative_data})
+            else:
+                return 'Indicator does not exist'
         
     def indicator_get(self, initiative_id, indicator_id):
         '''Fetch an indicator based on id'''
@@ -153,7 +161,10 @@ class Hub:
     def initiative_delete(self, initiative_id, force=False, dry_run=False):
         '''Deletes an initiative'''
         initiative = self.initiative_get(initiative_id)
-        return initiative.delete(force, dry_run)
+        if initiative is not None:
+            return initiative.delete(force, dry_run)
+        else:
+            return "Item is not a valid initiative or is inaccessible."
         
     def initiative_get(self, initiative_id):
         '''Fetch an initiative based on id'''
@@ -184,4 +195,7 @@ class Hub:
     def initiative_update(self, initiative_id, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         initiative = self.initiative_get(initiative_id)
-        return initiative.update(initiative_properties, data, thumbnail, metadata)
+        if initative is not None:
+            return initiative.update(initiative_properties, data, thumbnail, metadata)
+        else:
+            return "Item is not a valid initiative or is inaccessible."
