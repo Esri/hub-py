@@ -195,7 +195,7 @@ class Hub(object):
     def initiative_update(self, initiative_id, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         initiative = self.initiative_get(initiative_id)
-        if initative is not None:
+        if initiative is not None:
             return initiative.update(initiative_properties, data, thumbnail, metadata)
         else:
             return "Item is not a valid initiative or is inaccessible."
