@@ -120,12 +120,12 @@ class Hub(object):
             if indicator_id==indicator['id']:
                 _invalid_indicator = True
                 break
-            if _invalid_indicator:
-                data['indicators'] = list(filter(lambda indicator: indicator.get('id')!=indicator_id, data['indicators']))
-                initiative_data = json.dumps(data)
-                return initiative.update(item_properties={'text': initiative_data})
-            else:
-                return 'Indicator does not exist'
+        if _invalid_indicator:
+            data['indicators'] = list(filter(lambda indicator: indicator.get('id')!=indicator_id, data['indicators']))
+            initiative_data = json.dumps(data)
+            return initiative.update(item_properties={'text': initiative_data})
+        else:
+            return 'Indicator does not exist'
         
     def indicator_get(self, initiative_id, indicator_id):
         '''Fetch an indicator based on id'''
