@@ -81,10 +81,12 @@ class Hub(object):
             pass
         return indicator
 
-    def events_map(self):
+    def events_map(self, zoomlevel=None):
         '''Visualize events for a hub in an embedded map'''
         _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
-        event_map = self._org.map(zoomlevel=2)
+        if zoomlevel is None:
+            zoomlevel=2
+        event_map = self._org.map(zoomlevel)
         event_map.basemap = 'dark-gray'
         event_map.add_layer(_events_layer, {'title':'Event locations for this Hub','opacity':0.7})
         return event_map
