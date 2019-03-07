@@ -1,6 +1,8 @@
 # arcgishub
-The `arcgishub` package acts as the Python interface to ArcGIS Hub. It intends to serve both, the city and community user-base of Hub by allowing automation of several Hub worksflows and simplifying the use of the Hub information model.
+The `arcgishub` package acts as the Python interface to ArcGIS Hub. It intends to serve both, the city and community user-base of Hub by allowing automation of several Hub worksflows and simplifying the use of the Hub information model. It is built over the `arcgis` Python API. Click [here](https://developers.arcgis.com/python/) to learn more about the API.
 This package is built to be used in the Jupyter Notebook development environment. 
+
+In order to install Python, install the bundle that comes with the Anaconda distribution (Refer [this](https://www.anaconda.com/distribution/))
 
 ### Steps to install
 
