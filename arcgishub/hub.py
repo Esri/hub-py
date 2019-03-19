@@ -22,72 +22,84 @@ class Hub(object):
         self.url = url
         self._username = username
         self._password = password
-        self._initiative = None
         self.org = GIS(self.url, self._username, self._password)
-        
-    def _org_id(self):
-        '''Return the Organization Id for this hub'''
         try:
-            _org_id = self.org.properties.id
-            return _org_id
+            self._org_id = self.org.properties.id
         except AttributeError:
             return "Invalid Hub"
             sys.exit(0)
+            
+    @property
+    def enterprise_orgId(self):
+        '''Get the enterprise org id for this hub'''
+        try:
+            return self.org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
+        except AttributeError: 
+            return self._org_id
+            
+    @property
+    def community_orgId(self):
+        '''Get the community org id for this hub'''
+        try:
+            return self.org.properties.portalProperties.hub.settings.communityOrg.orgId
+        except AttributeError:
+            return self._org_id
+  
+    @property
+    def enterprise_orgUrl(self):
+        '''Get the enterprise org url for this hub'''
+        try:
+            return self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
+        except AttributeError:
+            return self.org.url
         
     @property
-    def orgs(self):
-        '''Get both org urls for this hub'''
-        orglist = []
-        orglist.append(self.org.url)
+    def community_orgUrl(self):
+        '''Get the community org url for this hub'''
         try:
-            companion_org_id = self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
+            return self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
         except AttributeError:
-            companion_org_id = self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
-        orglist.append(companion_org_id)
-        return orglist
+            return self.org.url
     
     @_lazy_property
     def initiatives(self):
         return InitiativeManager(self)
     
     @_lazy_property
-    def event(self):
+    def events(self):
         return EventManager(self)
     
 class Initiative(collections.OrderedDict):
     """Represents an initiative"""
     
-    def __init__(self, org, initiativeItem=None):
+    def __init__(self, org, initiativeItem):
         '''Constructs an empty Initiative object'''
-        if initiativeItem:
-            if 'hubInitiative' not in initiativeItem.typeKeywords:
-                raise TypeError("Item is not a valid initiative.")
-            self.item = initiativeItem
-            self._org = org
-            self._initiativedict = self.item.get_data()
-            pmap = PropertyMap(self._initiativedict)
-            self.definition = pmap
-        else:
-            self.item = None
-            self._org = org
-            self._initiativedict = {"type":"Hub Initiative", "typekeywords":"hubInitiative"}
-            pmap = PropertyMap(self._initiativedict)
-            self.definition = pmap
+        if 'hubInitiative' not in initiativeItem.typeKeywords:
+            raise TypeError("Item is not a valid initiative.")
+        self.item = initiativeItem
+        self._org = org
+        self._initiativedict = self.item.get_data()
+        pmap = PropertyMap(self._initiativedict)
+        self.definition = pmap
             
     def __repr__(self):
-        return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.initiativeTitle, self.initiativeOwner)
+        return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
        
     @property
-    def initiativeId(self):
+    def itemId(self):
         return self.item.id
     
     @property
-    def initiativeTitle(self):
+    def title(self):
         return self.item.title
     
     @property
-    def initiativeOwner(self):
+    def owner(self):
         return self.item.owner
+    
+    @_lazy_property
+    def indicators(self):
+        return IndicatorManager(self._org, self.item)
     
     def delete(self, force=False, dry_run=False):
         '''Deletes an initiative''' 
@@ -97,7 +109,7 @@ class Initiative(collections.OrderedDict):
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         if initiative_properties:
-            return self.item.update(initiative_properties, data, thumbnail, metadata)
+            return self.item.update(initiative_properties, data, thumbnail, metadata)          
     
 class InitiativeManager(object):
     """Helper class for managing initiatives within a Hub"""
@@ -106,14 +118,14 @@ class InitiativeManager(object):
         self._org = hub.org
         if initiative:
             self._initiative = initiative
-        
-    @_lazy_property
-    def indicators(self):
-        return IndicatorManager(self)
           
     def add(self, initiative_properties, data=None, thumbnail=None, metadata=None, owner=None, folder=None):
         '''Adding an initiative'''
-        initiative_properties['typekeywords'] = "hubInitiative"
+        try:
+            if 'hubInitiaitve' not in initiative_properties['typekeywords']:
+                initiative_properties['typekeywords'].append("hubInitiative")
+        except:
+                initiative_properties['typekeywords'] = "hubInitiative"
         item = self._org.content.add(initiative_properties, data, thumbnail, metadata, owner, folder)
         return Initiative(self._org, item)
     
