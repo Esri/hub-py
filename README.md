@@ -40,7 +40,7 @@ myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or th
 myHub.initiatives.search()
 ```
 
-fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods-and-its-usage) for more information about the functionality supported.
+fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods) for more information about the functionality supported.
 
 
 ### Future versions will allow:
