@@ -99,15 +99,22 @@ class Initiative(collections.OrderedDict):
     def owner(self):
         return self.item.owner
     
+    @property
+    def url(self):
+        return self.item.properties['url']
+    
+    @property
+    def siteUrl(self):
+        return self.item.url
+    
     @_lazy_property
     def indicators(self):
         return IndicatorManager(self.item)
     
-    def delete(self, force=False, dry_run=False):
-        '''Deletes an initiative''' 
-        if self.item is not None:
-            return self.item.delete(force, dry_run)
-    
+    def get_data(self):
+        '''Returns data for the initiative'''
+        return self.item.get_data()
+
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         if initiative_properties:
@@ -121,16 +128,6 @@ class InitiativeManager(object):
         if initiative:
             self._initiative = initiative
           
-    def add(self, initiative_properties, data=None, thumbnail=None, metadata=None, owner=None, folder=None):
-        '''Adding an initiative'''
-        try:
-            if 'hubInitiaitve' not in initiative_properties['typekeywords']:
-                initiative_properties['typekeywords'].append("hubInitiative")
-        except:
-                initiative_properties['typekeywords'] = "hubInitiative"
-        item = self._org.content.add(initiative_properties, data, thumbnail, metadata, owner, folder)
-        return Initiative(self._org, item)
-    
     def get(self, initiative_id):
         '''Fetch initiative for given initiative id'''
         initiativeItem = self._org.content.get(initiative_id)
