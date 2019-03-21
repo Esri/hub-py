@@ -111,10 +111,20 @@ class Initiative(collections.OrderedDict):
     def indicators(self):
         return IndicatorManager(self.item)
     
-    def get_data(self):
-        '''Returns data for the initiative'''
-        return self.item.get_data()
-
+    def delete(self, force=False, dry_run=False):
+        '''Deletes an initiative'''
+        if self.item is not None:
+            #Fetch Initiative Collaboration group
+            _collab_groupId = self.item.properties['groupId']
+            _collab_group = self._org.groups.get(_collab_groupId)
+            #Fetch Open Data Group
+            _od_groupId = self.item.properties['openDataGroupId']
+            _od_group = self._org.groups.get(_od_groupId)
+            #Delete groups and initiative
+            _collab_group.delete()
+            _od_group.delete()
+            return self.item.delete(force, dry_run)
+    
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         if initiative_properties:
@@ -125,9 +135,42 @@ class InitiativeManager(object):
     
     def __init__(self, hub, initiative=None):
         self._org = hub.org
+        self._enterprise_orgUrl = hub.enterprise_orgUrl
         if initiative:
             self._initiative = initiative
           
+    def add(self, title, description=None, data=None, thumbnail=None):
+        '''Adding an initiative'''
+        #Define initiative
+        if description is None:
+            description = 'Create your own initiative by combining existing applications with a custom site.'
+        _item_dict = {"type":"Hub Initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
+        
+        #Defining open data and collaboration groups
+        _od_group_title = title + ' Initiative Open Data Group'
+        _od_group_dict = {"title": _od_group_title, "tags": ["Hub Initiative Group", "Open Data"], "access":"public", "isOpenData": True, "protected": True}
+        _collab_group_title = title + ' Initiative Collaboration Group'
+        _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Initiative Group", "initiativeCollaborationGroup"], "access":"org", "protected": True}
+        
+        #Create groups
+        od_group = self._org.groups.create_from_dict(_od_group_dict)
+        collab_group = self._org.groups.create_from_dict(_collab_group_dict)
+        
+        #Adding it to _item_dict
+        if od_group is not None and collab_group is not None:
+            _item_dict['properties']['groupId'] = collab_group.id
+            _item_dict['properties']['openDataGroupId'] = od_group.id
+        
+        #Create initiative and share it with collaboration group
+        item = self._org.content.add(_item_dict, owner=self._org.users.me.username)
+        item.share(groups=[collab_group])
+        
+        #update initiaitve data
+        _item_data = {"assets": [{"id": "bannerImage","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _data = json.dumps(_item_data)
+        item.update(item_properties={'text': _data})
+        return Initiative(self._org, item)
+    
     def get(self, initiative_id):
         '''Fetch initiative for given initiative id'''
         initiativeItem = self._org.content.get(initiative_id)
