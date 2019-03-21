@@ -37,7 +37,7 @@ For instance:
 
 ```  
 myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your org
-myHub.initiatives()
+myHub.initiatives.search()
 ```
 
 fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods-and-its-usage) for more information about the functionality supported.
