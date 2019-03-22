@@ -109,12 +109,25 @@ class Initiative(collections.OrderedDict):
     
     @_lazy_property
     def indicators(self):
-        return IndicatorManager(self.item)
+        return IndicatorManager(self._org, self.item)
     
-    def get_data(self):
-        '''Returns data for the initiative'''
-        return self.item.get_data()
-
+    def delete(self, force=False, dry_run=False):
+        '''Deletes an initiative'''
+        if self.item is not None:
+            #Fetch Initiative Collaboration group
+            _collab_groupId = self.item.properties['groupId']
+            _collab_group = self._org.groups.get(_collab_groupId)
+            #Fetch Open Data Group
+            _od_groupId = self.item.properties['openDataGroupId']
+            _od_group = self._org.groups.get(_od_groupId)
+            #Disable delete protection on groups
+            _collab_group.protected = False
+            _od_group.protected = False
+            #Delete groups and initiative
+            _collab_group.delete()
+            _od_group.delete()
+            return self.item.delete(force, dry_run)
+    
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         if initiative_properties:
@@ -125,9 +138,46 @@ class InitiativeManager(object):
     
     def __init__(self, hub, initiative=None):
         self._org = hub.org
+        self._enterprise_orgUrl = hub.enterprise_orgUrl
         if initiative:
             self._initiative = initiative
           
+    def add(self, title, description=None, data=None, thumbnail=None):
+        '''Adding an initiative'''
+        #Define initiative
+        if description is None:
+            description = 'Create your own initiative to organize people around a shared goal.'
+        _item_dict = {"type":"Hub Initiative", "snippet":title + " Custom initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
+        
+        #Defining open data and collaboration groups
+        _od_group_title = title + ' Initiative Content Group'
+        _od_group_dict = {"title": _od_group_title, "tags": ["Hub Initiative Group", "Open Data"], "access":"public", "isOpenData": True}
+        _collab_group_title = title + ' Initiative Collaboration Group'
+        _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Initiative Group", "initiativeCollaborationGroup"], "access":"org"}
+        
+        #Create groups
+        od_group = self._org.groups.create_from_dict(_od_group_dict)
+        collab_group = self._org.groups.create_from_dict(_collab_group_dict)
+        
+        #Protect groups from accidental deletion
+        od_group.protected = True
+        collab_group.protected = True
+        
+        #Adding it to _item_dict
+        if od_group is not None and collab_group is not None:
+            _item_dict['properties']['groupId'] = collab_group.id
+            _item_dict['properties']['openDataGroupId'] = od_group.id
+        
+        #Create initiative and share it with collaboration group
+        item = self._org.content.add(_item_dict, owner=self._org.users.me.username)
+        item.share(groups=[collab_group])
+        
+        #update initiative data
+        _item_data = {"assets": [{"id": "bannerImage","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _data = json.dumps(_item_data)
+        item.update(item_properties={'text': _data})
+        return Initiative(self._org, item)
+    
     def get(self, initiative_id):
         '''Fetch initiative for given initiative id'''
         initiativeItem = self._org.content.get(initiative_id)
@@ -239,23 +289,55 @@ class Indicator(collections.OrderedDict):
     
 class IndicatorManager(object):
     """Helper class for managing indicators within an initiative"""
-    def __init__(self, initiativeItem):
+    def __init__(self, org, initiativeItem):
+        self._org = org
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicators = self._initiativedata['indicators']
         
     def add(self, indicator_properties):
         '''Adds a new indicator to given initiative'''
-        self._initiativedata['indicators'].append(indicator_properties)
-        _new_initiativedata = json.dumps(self._initiativedata)
-        self._initiativeItem.update(item_properties={'text': _new_initiativedata})
-        return Indicator(self._initiativeItem, indicator_properties)
+        _stemplates = []
+        _id = indicator_properties['id']
+        _added = False
+        
+        #Fetch initiative template data
+        _itemplateid = self._initiativedata['source']
+        _itemplate = self._org.content.get(_itemplateid)
+        _itemplatedata = _itemplate.get_data()
+        
+        #Fetch solution templates associated with initiative template
+        for step in _itemplatedata['steps']:
+            for _stemplateid in step['templateIds']:
+                _stemplates.append(_stemplateid)
+        
+        #Fetch data for each solution template
+        for _stemplateid in _stemplates:
+            _stemplate = self._org.content.get(_stemplateid)
+            _stemplatedata = _stemplate.get_data()
+            
+            #Check if indicator exists in solution
+            for indicator in _stemplatedata['indicators']:
+                
+                #add indicator to initiative
+                if indicator['id']==_id:
+                    if self.get(_id) is not None:
+                        return 'Indicator already exists'
+                    else:
+                        self._initiativedata['indicators'].append(indicator_properties)
+                        _new_initiativedata = json.dumps(self._initiativedata)
+                        self._initiativeItem.update(item_properties={'text': _new_initiativedata})
+                        _added = True
+                        return Indicator(self._initiativeItem, indicator_properties)
+        if not _added:
+            return 'Invalid indicator id for this initiative'
     
     def get(self, indicator_id):
         '''Fetch initiative for given initiative id'''
         for indicator in self._indicators:
             if indicator['id']==indicator_id:
                 return Indicator(self._initiativeItem, indicator)
+        #raise CustomException
         return None
     
     def search(self, indicator_id=None, url=None, itemId=None, name=None):
