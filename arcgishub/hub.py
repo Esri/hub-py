@@ -143,11 +143,12 @@ class InitiativeManager(object):
         '''Adding an initiative'''
         #Define initiative
         if description is None:
-            description = 'Create your own initiative by combining existing applications with a custom site.'
-        _item_dict = {"type":"Hub Initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
+            description = 'Create your own initiative to organize people around a shared goal.'
+        _item_dict = {"type":"Hub Initiative", "snippet":title + " Custom initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
         
+
         #Defining open data and collaboration groups
-        _od_group_title = title + ' Initiative Open Data Group'
+        _od_group_title = title + ' Initiative Content Group'
         _od_group_dict = {"title": _od_group_title, "tags": ["Hub Initiative Group", "Open Data"], "access":"public", "isOpenData": True, "protected": True}
         _collab_group_title = title + ' Initiative Collaboration Group'
         _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Initiative Group", "initiativeCollaborationGroup"], "access":"org", "protected": True}
@@ -165,7 +166,7 @@ class InitiativeManager(object):
         item = self._org.content.add(_item_dict, owner=self._org.users.me.username)
         item.share(groups=[collab_group])
         
-        #update initiaitve data
+        #update initiative data
         _item_data = {"assets": [{"id": "bannerImage","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
