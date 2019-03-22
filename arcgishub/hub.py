@@ -17,6 +17,16 @@ def _lazy_property(fn):
         return getattr(self, attr_name)
     return _lazy_property
 
+def _create_valid_url(inputUrl):
+    '''Helper method for converting a URL without a scheme into a valid URL'''
+    from urllib.parse import urlparse
+    o = urlparse(inputUrl)
+    if o.netloc is '' and o.path is not '':
+        o = o._replace(netloc=o.path, path='')
+    if o.scheme is None or o.scheme is '':
+        o = o._replace(scheme = 'https')
+    return o.geturl()
+
 class Hub(object):
     """Entry point. Acceessing an individual hub and its components"""
     
@@ -50,19 +60,30 @@ class Hub(object):
     @property
     def enterprise_orgUrl(self):
         '''Get the enterprise org url for this hub'''
+        url = None
         try:
-            return self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
+            url = self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
         except AttributeError:
-            return self.org.url
+            url = self.org.url
+        return _create_valid_url(url)
         
     @property
     def community_orgUrl(self):
         '''Get the community org url for this hub'''
+        url = None
         try:
-            return self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
+            url = self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
         except AttributeError:
-            return self.org.url
-    
+            url = self.org.url
+        return _create_valid_url(url)     
+
+    def community_users(self, query=None):
+        '''Search the list of community users'''
+        _searchQuery = "orgid:" + self.community_orgId
+        if query is not None:
+            _searchQuery += " AND " + query
+        return self.org.users.search(query=_searchQuery, outside_org=True)
+
     @_lazy_property
     def initiatives(self):
         return InitiativeManager(self)
@@ -74,12 +95,12 @@ class Hub(object):
 class Initiative(collections.OrderedDict):
     """Represents an initiative"""
     
-    def __init__(self, org, initiativeItem):
+    def __init__(self, hub, initiativeItem):
         '''Constructs an empty Initiative object'''
         if 'hubInitiative' not in initiativeItem.typeKeywords:
             raise TypeError("Item is not a valid initiative.")
         self.item = initiativeItem
-        self._org = org
+        self._hub = hub
         self._initiativedict = self.item.get_data()
         pmap = PropertyMap(self._initiativedict)
         self.definition = pmap
@@ -87,6 +108,10 @@ class Initiative(collections.OrderedDict):
     def __repr__(self):
         return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
        
+    @property
+    def hub(self):
+        return self._hub
+
     @property
     def itemId(self):
         return self.item.id
@@ -107,6 +132,12 @@ class Initiative(collections.OrderedDict):
     def siteUrl(self):
         return self.item.url
     
+    @property
+    def followers(self):
+        '''Return list of followers for this initiative'''
+        _followers = self._hub.community_users(query="hubInitiativeId|" + self.itemId)
+        return _followers
+    
     @_lazy_property
     def indicators(self):
         return IndicatorManager(self.item)
@@ -124,15 +155,15 @@ class InitiativeManager(object):
     """Helper class for managing initiatives within a Hub"""
     
     def __init__(self, hub, initiative=None):
-        self._org = hub.org
+        self._hub = hub
         if initiative:
             self._initiative = initiative
           
     def get(self, initiative_id):
         '''Fetch initiative for given initiative id'''
-        initiativeItem = self._org.content.get(initiative_id)
+        initiativeItem = self._hub.org.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
-            return Initiative(self._org, initiativeItem)
+            return Initiative(self._hub, initiativeItem)
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
     
@@ -152,9 +183,9 @@ class InitiativeManager(object):
             query += ' AND modified:'+modified
         if tags!=None:
             query += ' AND tags:'+tags
-        items = self._org.content.search(query=query, max_items=5000)
+        items = self._hub.org.content.search(query=query, max_items=5000)
         for item in items:
-            initiativelist.append(Initiative(self._org, item))
+            initiativelist.append(Initiative(self._hub, item))
         return initiativelist
         
 class Indicator(collections.OrderedDict):
@@ -170,7 +201,7 @@ class Indicator(collections.OrderedDict):
             
     def __repr__(self):
         return '<%s id:"%s" optional:%s>' % (type(self).__name__, self.indicatorId, self.optional)
-       
+
     @property
     def indicatorId(self):
         return self._indicatordict['id']
