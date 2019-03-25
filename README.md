@@ -1,16 +1,34 @@
 # arcgishub
-The `arcgishub` package acts as the Python interface to ArcGIS Hub. It intends to serve both, the city and community user-base of Hub by allowing automation of several Hub worksflows and simplifying the use of the Hub information model.
-This package is built to be used in the Jupyter Notebook development environment. 
+* The `arcgishub` package acts as the Python interface to ArcGIS Hub. It aims to serve both, the enterprise and community user-base of Hub by allowing automation of several Hub worksflows and simplifying the use of the Hub information model. 
+* It is built over the `arcgis` Python API. Click [here](https://developers.arcgis.com/python/) to learn more about the API.
+* The intended UI for this API is the Jupyter Notebook development environment. 
+
+In order to install Python, install the bundle that comes with the Anaconda distribution (Refer [this](https://www.anaconda.com/distribution/))
 
 ### Steps to install
 
 Execute the following command in the terminal
 
-``` pip install -e git+https://github.com/esridc/hub-py.git ```
+``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
-``` from arcgishub import * ```
+``` from arcgishub import hub ```
+
+
+### Steps to upgrade package
+
+Execute the following command in the terminal
+
+``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
+
+Once installed, test it by launching an instance of Jupyter Notebook and importing the package
+
+``` from arcgishub import hub ```
+
+Test if the version has been upgraded by following with the command
+
+``` arcgishub.__version__ ```
 
 ### Getting Started
 
@@ -18,11 +36,11 @@ The first step to interacting with `arcgishub` is creating an instance of a Hub 
 For instance:
 
 ```  
-myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your community org
-myHub.initiatives()
+myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your org
+myHub.initiatives.search()
 ```
 
-fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods-and-its-usage) for more information about the functionality supported.
+fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods) for more information about the functionality supported.
 
 
 ### Future versions will allow:

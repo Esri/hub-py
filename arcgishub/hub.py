@@ -149,6 +149,7 @@ class InitiativeManager(object):
             description = 'Create your own initiative to organize people around a shared goal.'
         _item_dict = {"type":"Hub Initiative", "snippet":title + " Custom initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
         
+
         #Defining open data and collaboration groups
         _od_group_title = title + ' Initiative Content Group'
         _od_group_dict = {"title": _od_group_title, "tags": ["Hub Initiative Group", "Open Data"], "access":"public", "isOpenData": True}
@@ -162,7 +163,7 @@ class InitiativeManager(object):
         #Protect groups from accidental deletion
         od_group.protected = True
         collab_group.protected = True
-        
+
         #Adding it to _item_dict
         if od_group is not None and collab_group is not None:
             _item_dict['properties']['groupId'] = collab_group.id
