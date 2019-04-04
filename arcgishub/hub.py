@@ -18,7 +18,7 @@ def _lazy_property(fn):
     return _lazy_property
 
 class Hub(object):
-    """Entry point. Acceessing an individual hub and its components"""
+    """Entry point into the Hub module. Acceessing an individual hub and its components"""
     
     def __init__(self, url, username=None, password=None):
         self.url = url
@@ -28,8 +28,8 @@ class Hub(object):
         try:
             self._org_id = self.org.properties.id
         except AttributeError:
-            return "Invalid Hub"
-            sys.exit(0)
+            print("You need to be signed in to access this hub.")
+            raise
             
     @property
     def enterprise_orgId(self):
@@ -96,6 +96,22 @@ class Initiative(collections.OrderedDict):
         return self.item.title
     
     @property
+    def description(self):
+        return self.item.description
+    
+    @description.setter
+    def description(self, value):
+        self.item.description = value
+    
+    @property
+    def snippet(self):
+        return self.item.snippet
+    
+    @snippet.setter
+    def snippet(self, value):
+        self.item.snippet = value
+    
+    @property
     def owner(self):
         return self.item.owner
     
@@ -131,7 +147,10 @@ class Initiative(collections.OrderedDict):
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         '''Update an initiative'''
         if initiative_properties:
-            return self.item.update(initiative_properties, data, thumbnail, metadata)          
+            _initiative_data = self.definition
+            for key, value in initiative_properties.items():
+                _initiative_data[key] = value
+            return self.item.update(_initiative_data, data, thumbnail, metadata)
     
 class InitiativeManager(object):
     """Helper class for managing initiatives within a Hub"""
@@ -333,12 +352,14 @@ class IndicatorManager(object):
             return 'Invalid indicator id for this initiative'
     
     def get(self, indicator_id):
-        '''Fetch initiative for given initiative id'''
+        '''Fetch indicator for given indicator id'''
         for indicator in self._indicators:
             if indicator['id']==indicator_id:
-                return Indicator(self._initiativeItem, indicator)
-        #raise CustomException
-        return None
+                _indicator = indicator
+        try:
+            return Indicator(self._initiativeItem, _indicator)
+        except:
+            return "Indicator doesn't exist or is inaccessible"
     
     def search(self, indicator_id=None, url=None, itemId=None, name=None):
         '''Search for indicator'''
@@ -357,6 +378,7 @@ class IndicatorManager(object):
         for indicator in _indicators:
             indicatorlist.append(Indicator(self._initiativeItem, indicator))
         return indicatorlist
+
 
 class Event(collections.OrderedDict):
     """Represents an event in a Hub"""
