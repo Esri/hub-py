@@ -57,7 +57,9 @@ class Hub(object):
             
     @property
     def enterprise_orgId(self):
-        '''Get the enterprise org id for this hub'''
+        """
+        Returns the org id of the associated AGOL Enterprise Organization for an authorized GIS.
+        """
         try:
             self.org.properties.portalProperties.hub
             try:
@@ -70,7 +72,9 @@ class Hub(object):
                         
     @property
     def community_orgId(self):
-        '''Get the community org id for this hub'''
+        """
+        Returns the org id of the associated AGOL Community Organization for an authorized GIS.
+        """
         try:
             self.org.properties.portalProperties.hub
             try:
@@ -83,8 +87,9 @@ class Hub(object):
   
     @property
     def enterprise_orgUrl(self):
-        '''Get the enterprise org url for this hub'''
-        try:
+        """
+        Returns the url of the associated AGOL Enterprise Organization for an authorized GIS.
+        """
             self.org.properties.portalProperties.hub
             try:
                 self.org.properties.portalProperties.hub.settings.enterpriseOrg
@@ -101,7 +106,9 @@ class Hub(object):
         
     @property
     def community_orgUrl(self):
-        '''Get the community org url for this hub'''
+        """
+        Returns the url of the associated AGOL Community Organization for an authorized GIS.
+        """
         try:
             self.org.properties.portalProperties.hub
             try:
@@ -119,10 +126,16 @@ class Hub(object):
     
     @_lazy_property
     def initiatives(self):
+        """
+        The resource manager for Hub initiatives. See :class:`~arcgis.apps.hub.InitiativeManager`.
+        """
         return InitiativeManager(self)
     
     @_lazy_property
     def events(self):
+        """
+        The resource manager for Hub events. See :class:`~arcgis.apps.hub.EventsManager`.
+        """
         return EventManager(self)
     
 class Initiative(collections.OrderedDict):
@@ -132,7 +145,9 @@ class Initiative(collections.OrderedDict):
     """
     
     def __init__(self, org, initiativeItem):
-        '''Constructs an empty Initiative object'''
+        """
+        Constructs an empty Initiative object
+        """
         self.item = initiativeItem
         self._org = org
         try:
@@ -147,14 +162,23 @@ class Initiative(collections.OrderedDict):
        
     @property
     def itemId(self):
+        """
+        Returns the item id of the initiative item
+        """
         return self.item.id
     
     @property
     def title(self):
+        """
+        Returns the title of the initiative item
+        """
         return self.item.title
     
     @property
     def description(self):
+        """
+        Getter/Setter for the initiative description
+        """
         return self.item.description
     
     @description.setter
@@ -163,6 +187,9 @@ class Initiative(collections.OrderedDict):
     
     @property
     def snippet(self):
+        """
+        Getter/Setter for the initiative snippet
+        """
         return self.item.snippet
     
     @snippet.setter
@@ -171,18 +198,31 @@ class Initiative(collections.OrderedDict):
     
     @property
     def owner(self):
+        """
+        Returns the owner of the initiative item
+        """
         return self.item.owner
     
     @property
     def url(self):
+        """
+        Returns the url of the initiative editor
+        """
         return self.item.properties['url']
     
     @property
     def siteUrl(self):
+        """
+        Returns the url of the initiative site
+        """
         return self.item.url
     
     @_lazy_property
     def indicators(self):
+        """
+        The resource manager for an Initiative's indicators. 
+        See :class:`~arcgis.apps.hub.IndicatorManager`.
+        """
         return IndicatorManager(self._org, self.item)
     
     def delete(self, dry_run=False):
@@ -447,7 +487,9 @@ class Indicator(collections.OrderedDict):
     """
     
     def __init__(self, initiativeItem, indicatorObject):
-        '''Constructs an empty Indicator object'''
+        """
+        Constructs an empty Indicator object
+        """
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicatordict = indicatorObject
@@ -459,18 +501,30 @@ class Indicator(collections.OrderedDict):
        
     @property
     def indicatorId(self):
+        """
+        Returns the id of the indicator
+        """
         return self._indicatordict['id']
     
     @property
     def indicatorType(self):
+        """
+        Returns the type (Data/Parameter) of the indicator
+        """
         return self._indicatordict['type']
     
     @property
     def optional(self):
+        """
+        Status if the indicator is optional (True/False)
+        """
         return self._indicatordict['optional']
     
     @property
     def url(self):
+        """
+        Returns the data url (if configured) of the indicator
+        """
         try:
             return self._indicatordict['source']['url']
         except:
@@ -478,6 +532,9 @@ class Indicator(collections.OrderedDict):
         
     @property
     def name(self):
+        """
+        Returns the layer name (if configured) of the indicator
+        """
         try:
             return self._indicatordict['source']['url']
         except:
@@ -485,6 +542,9 @@ class Indicator(collections.OrderedDict):
         
     @property
     def itemId(self):
+        """
+        Returns the item id of the data layer (if configured) of the indicator
+        """
         try:
             return self._indicatordict['source']['itemId']
         except:
@@ -492,6 +552,9 @@ class Indicator(collections.OrderedDict):
         
     @property
     def mappings(self):
+        """
+        Returns the attribute mapping from data layer (if configured) of the indicator
+        """
         try:
             return self._indicatordict['source']['mappings']
         except:
@@ -705,7 +768,9 @@ class Event(collections.OrderedDict):
     as well as gather and archive content during the event for later retrieval or analysis.
     """
     def __init__(self, org, eventObject):
-        '''Constructs an empty Event object'''
+        """
+        Constructs an empty Event object
+        """
         self._org = org
         self._eventgeometry = eventObject.geometry
         self._eventdict = eventObject.attributes
@@ -717,62 +782,107 @@ class Event(collections.OrderedDict):
     
     @property
     def title(self):
+        """
+        Returns the title of the event
+        """
         return self._eventdict['title']
     
     @property
     def location(self):
+        """
+        Returns the location of the event
+        """
         return self._eventdict['location'] 
     
     @property
     def initiativeId(self):
+        """
+        Returns the initiative id of the event if it belongs to an Initiative
+        """
         return self._eventdict['initiativeId'] 
     
     @property
     def siteId(self):
+        """
+        Returns the site id of the event site
+        """
         return self._eventdict['siteId']
     
     @property
     def organizerName(self):
+        """
+        Returns the name of the organizer of the event
+        """
         return self._eventdict['organizerName'] 
     
     @property
     def organizers(self):
+        """
+        Returns names of all organizers of the event
+        """
         return self._eventdict['organizers']
     
     @property
     def description(self):
+        """
+        Returns description of the event
+        """
         return self._eventdict['description']
     
     @property
     def startDate(self):
+        """
+        Returns start date of the event in UNIX time
+        """
         return self._eventdict['startDate']
     
     @property
     def endDate(self):
+        """
+        Returns end date of the event in UNIX time
+        """
         return self._eventdict['endDate']
     
     @property
     def creator(self):
+        """
+        Returns creator of the event
+        """
         return self._eventdict['Creator']
     
     @property
     def capacity(self):
+        """
+        Returns seating capacity for attendees of the event
+        """
         return self._eventdict['capacity']
     
     @property
     def attendance(self):
+        """
+        Returns attendance count for a past event
+        """
         return self._eventdict['attendance']
     
     @property
     def status(self):
+        """
+        Returns status of the event
+        """
         return self._eventdict['status']
     
     @property
     def isCancelled(self):
+        """
+        Check if event is Cancelled
+        """
         return self._eventdict['isCancelled']
     
     @property
     def geometry(self):
+        """
+        Returns co-ordinates of the event location
+        """
         return self._eventgeometry
     
 class EventManager(object):
