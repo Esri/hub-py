@@ -18,7 +18,32 @@ def _lazy_property(fn):
     return _lazy_property
 
 class Hub(object):
-    """Entry point into the Hub module. Acceessing an individual hub and its components"""
+    """
+    Entry point into the Hub module. Lets you access an individual hub and its components.
+    .. code-block:: python
+
+    from arcgis.gis import GIS
+    gis = arcgis.gis.GIS("https://arcgis.com", "<username>", "<password>")
+    myHub = gis.hub
+    a_Initiative = myHub.initiatives.get(itemId)
+    a_Indicators = a_Initiative.indicators.search()
+    myEvents = myHub.events.search()
+
+    ================    ===============================================================
+    **Argument**        **Description**
+    ----------------    ---------------------------------------------------------------
+    url                 Required string. If no URL is provided by user while connecting 
+                        to the GIS, then the URL will be ArcGIS Online.
+    ----------------    ---------------------------------------------------------------
+    username            Optional string as entered while connecting to GIS. The login user name 
+                        (case-sensitive).
+    ----------------    ---------------------------------------------------------------
+    password            Optional string as entered while connecting to GIS. If a username is 
+                        provided, a password is expected.  This is case-sensitive. If the password 
+                        is not provided, the user is prompted in the interactive dialog.
+    ================    ===============================================================
+
+    """
     
     def __init__(self, url, username=None, password=None):
         self.url = url
@@ -28,40 +53,69 @@ class Hub(object):
         try:
             self._org_id = self.org.properties.id
         except AttributeError:
-            print("You need to be signed in to access this hub.")
-            raise
+            self._org_id = None
             
     @property
     def enterprise_orgId(self):
         '''Get the enterprise org id for this hub'''
         try:
-            return self.org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
-        except AttributeError: 
-            return self._org_id
-            
+            self.org.properties.portalProperties.hub
+            try:
+                return self.org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
+            except AttributeError: 
+                return self._org_id
+        except:
+            print("Hub does not exist or is inaccessible.")
+            raise
+                        
     @property
     def community_orgId(self):
         '''Get the community org id for this hub'''
         try:
-            return self.org.properties.portalProperties.hub.settings.communityOrg.orgId
-        except AttributeError:
-            return self._org_id
+            self.org.properties.portalProperties.hub
+            try:
+                return self.org.properties.portalProperties.hub.settings.communityOrg.orgId
+            except AttributeError:
+                return self._org_id
+        except:
+            print("Hub does not exist or is inaccessible.")
+            raise  
   
     @property
     def enterprise_orgUrl(self):
         '''Get the enterprise org url for this hub'''
         try:
-            return self.org.properties.portalProperties.hub.settings.enterpriseOrg.portalHostname
+            self.org.properties.portalProperties.hub
+            try:
+                self.org.properties.portalProperties.hub.settings.enterpriseOrg
+                try:
+                    _url = self.org.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
+                except:
+                    _url = self.org.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
+                return "https://"+_url
+            except AttributeError: 
+                return self.org.url
         except AttributeError:
-            return self.org.url
+            print("Hub does not exist or is inaccessible.")
+            raise
         
     @property
     def community_orgUrl(self):
         '''Get the community org url for this hub'''
         try:
-            return self.org.properties.portalProperties.hub.settings.communityOrg.portalHostname
-        except AttributeError:
-            return self.org.url
+            self.org.properties.portalProperties.hub
+            try:
+                self.org.properties.portalProperties.hub.settings.communityOrg
+                try:
+                    _url = self.org.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
+                except:
+                    _url = self.org.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
+                return "https://"+_url
+            except AttributeError: 
+                return self.org.url
+        except:
+            print("Hub does not exist or is inaccessible.")
+            raise
     
     @_lazy_property
     def initiatives(self):
@@ -72,17 +126,21 @@ class Hub(object):
         return EventManager(self)
     
 class Initiative(collections.OrderedDict):
-    """Represents an initiative"""
+    """
+    Represents an initiative within one's Hub. An Initiative supports 
+    policy- or activity-oriented goals through workflows, tools and team collaboration.
+    """
     
     def __init__(self, org, initiativeItem):
         '''Constructs an empty Initiative object'''
-        if 'hubInitiative' not in initiativeItem.typeKeywords:
-            raise TypeError("Item is not a valid initiative.")
         self.item = initiativeItem
         self._org = org
-        self._initiativedict = self.item.get_data()
-        pmap = PropertyMap(self._initiativedict)
-        self.definition = pmap
+        try:
+            self._initiativedict = self.item.get_data()
+            pmap = PropertyMap(self._initiativedict)
+            self.definition = pmap
+        except:
+            self.definition = None
             
     def __repr__(self):
         return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
@@ -127,8 +185,38 @@ class Initiative(collections.OrderedDict):
     def indicators(self):
         return IndicatorManager(self._org, self.item)
     
-    def delete(self, force=False, dry_run=False):
-        '''Deletes an initiative'''
+    def delete(self, dry_run=False):
+        """
+        Deletes the initiative. If unable to delete, raises a RuntimeException. To know if you can 
+        safely delete the item, use the optional parameter 'dry_run'
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        force               Optional bool. Available in ArcGIS Enterprise 10.6.1 and higher.
+                            Force deletion is applicable only to items that were orphaned when
+                            a server federated to the ArcGIS Enterprise was removed accidentally
+                            before properly unfederating it. When called on other items, it has
+                            no effect.
+        ---------------     --------------------------------------------------------------------
+        dry_run             Optional bool. Available in ArcGIS Enterprise 10.6.1 and higher.If
+                            True, checks if the item can be safely deleted and gives you back
+                            either a dictionary with details. If dependent items are preventing
+                            deletion, a list of such Item objects are provided.
+        ===============     ====================================================================
+
+        :return:
+            A bool containing True (for success) or False (for failure). 
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Delete an initiative successfully
+
+            initiative1 = myHub.initiatives.get('itemId12345')
+            initiative1.delete()
+
+            >> True
+        """
         if self.item is not None:
             #Fetch Initiative Collaboration group
             _collab_groupId = self.item.properties['groupId']
@@ -142,10 +230,46 @@ class Initiative(collections.OrderedDict):
             #Delete groups and initiative
             _collab_group.delete()
             _od_group.delete()
-            return self.item.delete(force, dry_run)
+            return self.item.delete(force=False, dry_run)
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
-        '''Update an initiative'''
+        """ Updates the initiative.
+
+
+        .. note::
+            For initiative_properties, pass in arguments for only the properties you want to be updated.
+            All other properties will be untouched.  For example, if you want to update only the
+            initiative's description, then only provide the description argument in initiative_properties.
+
+
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        initiative_properties     Required dictionary. See URL below for the keys and values.
+        ---------------------     --------------------------------------------------------------------
+        data                      Optional string. Either a path or URL to the data.
+        ---------------------     --------------------------------------------------------------------
+        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
+        ---------------------     --------------------------------------------------------------------
+        metadata                  Optional string. Either a path or URL to the metadata.
+        =====================     ====================================================================
+
+
+        To find the list of applicable options for argument initiative_properties - 
+        https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update*
+
+        :return:
+           A boolean indicating success (True) or failure (False).
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Update an initiative successfully
+
+            initiative1 = myHub.initiatives.get('itemId12345')
+            initiative1.update(initiative_properties={'description':'Create your own initiative to organize people around a shared goal.'})
+
+            >> True
+        """
         if initiative_properties:
             _initiative_data = self.definition
             for key, value in initiative_properties.items():
@@ -153,16 +277,43 @@ class Initiative(collections.OrderedDict):
             return self.item.update(_initiative_data, data, thumbnail, metadata)
     
 class InitiativeManager(object):
-    """Helper class for managing initiatives within a Hub"""
+    """
+    Helper class for managing initiatives within a Hub. This class is not created by users directly. 
+    An instance of this class, called 'initiatives', is available as a property of the Hub object. Users
+    call methods on this 'initiatives' object to manipulate (add, get, search, etc) initiatives.
+    """
     
     def __init__(self, hub, initiative=None):
-        self._org = hub.org
-        self._enterprise_orgUrl = hub.enterprise_orgUrl
-        if initiative:
-            self._initiative = initiative
+        self._hub = hub
+        self._org = self._hub.org
           
     def add(self, title, description=None, data=None, thumbnail=None):
-        '''Adding an initiative'''
+        """ 
+        Adds a new initiative to the Hub.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        title               Required string.
+        ---------------     --------------------------------------------------------------------
+        description         Optional string. 
+        ---------------     --------------------------------------------------------------------
+        data                Optional string. Either a path or URL to the data.
+        ---------------     --------------------------------------------------------------------
+        thumbnail           Optional string. Either a path or URL to a thumbnail image.
+        ===============     ====================================================================
+
+        :return:
+           The initiative if successfully added, None if unsuccessful.
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Add an initiative successfully
+
+            initiative1 = myHub.initiatives.add(title='Vision Zero Analysis')
+            initiative1.item
+        """
+
         #Define initiative
         if description is None:
             description = 'Create your own initiative to organize people around a shared goal.'
@@ -198,16 +349,61 @@ class InitiativeManager(object):
         return Initiative(self._org, item)
     
     def get(self, initiative_id):
-        '''Fetch initiative for given initiative id'''
+        """ Returns the initiative object for the specified initiative_id.
+
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        initiative_id              Required string. The initiative identifier.
+        =======================    =============================================================
+
+        :return:
+            The initiative object if the item is found, None if the item is not found.
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Fetch an initiative successfully
+
+            initiative1 = myHub.initiatives.get('itemId12345')
+            initiative1.item
+
+        """
         initiativeItem = self._org.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
             return Initiative(self._org, initiativeItem)
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
     
-    def search(self, initiative_id=None, title=None, owner=None, created=None, modified=None, tags=None):
-        '''Search for initiative'''
+    def search(self, scope=None, initiative_id=None, title=None, owner=None, created=None, modified=None, tags=None):
+        """ 
+        Searches for initiatives.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        scope               Optional string. Defines the scope of search.
+                            Valid values are official, community or all. Default is None.
+        ---------------     --------------------------------------------------------------------
+        initiative_id       Optional string. Initiative identifier.
+        ---------------     --------------------------------------------------------------------
+        title               Optional string. Return initiatives with provided string in title.
+        ---------------     --------------------------------------------------------------------
+        owner               Optional string. Return initiatives owned by a username.
+        ---------------     --------------------------------------------------------------------
+        created             Optional string. Date the initiative was created. In UNIX time.
+        ---------------     --------------------------------------------------------------------
+        modified            Optional string. Date the initiative was last modified. In UNIX time.
+        ---------------     --------------------------------------------------------------------
+        tags                Optional string. User-defined tags that describe the initiative.
+        ===============     ====================================================================
+
+        :return:
+           A list of matching initiatives.
+        """
+
         initiativelist = []
+        
+        #Build search query
         query = 'typekeywords:hubInitiative'
         if initiative_id!=None:
             query += ' AND id:'+initiative_id
@@ -221,13 +417,34 @@ class InitiativeManager(object):
             query += ' AND modified:'+modified
         if tags!=None:
             query += ' AND tags:'+tags
-        items = self._org.content.search(query=query, max_items=5000)
+        
+        #Apply org scope and search
+        if scope is None:
+            items = self._org.content.search(query=query, max_items=5000)
+        elif scope.lower()=='official':
+            query += ' AND access:public'
+            _gis = GIS(self._hub.enterprise_orgUrl)
+            items = _gis.content.search(query=query, max_items=5000)
+        elif scope.lower()=='community':
+            query += ' AND access:public'
+            _gis = GIS(self._hub.community_orgUrl)
+            items = _gis.content.search(query=query, max_items=5000)
+        elif scope.lower()=='all':
+            items = self._org.content.search(query=query, outside_org=True, max_items=5000)
+        else:
+            raise Exception("Invalid value for scope")
+            
+        #Return searched initiatives
         for item in items:
             initiativelist.append(Initiative(self._org, item))
         return initiativelist
         
 class Indicator(collections.OrderedDict):
-    """Represents an indicator within an initiative"""
+    """
+    Represents an indicator within an initiative. Initiatives use Indicators to standardize 
+    data sources for ready-to-use analysis and comparison. Indicators are measurements of a system 
+    including features, calculated metrics, or quantified goals. 
+    """
     
     def __init__(self, initiativeItem, indicatorObject):
         '''Constructs an empty Indicator object'''
@@ -281,7 +498,21 @@ class Indicator(collections.OrderedDict):
             return 'Attribute mapping not available for this indicator'
     
     def delete(self):
-        '''Deletes an indicator from the initiative'''
+        """
+        Deletes an indicator from the initiative
+
+        :return:
+            A bool containing True (for success) or False (for failure). 
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Delete an indicator successfully
+
+            indicator1 = initiative1.indicators.get('streetCrashes')
+            indicator1.delete()
+
+            >> True
+        """
         if self._indicatordict is not None:
             _indicator_id = self._indicatordict['id']
             self._initiativedata['indicators'] = list(filter(lambda indicator: indicator.get('id')!=_indicator_id, self._initiativedata['indicators']))
@@ -289,17 +520,38 @@ class Indicator(collections.OrderedDict):
             return self._initiativeItem.update(item_properties={'text': _new_initiativedata})
      
     def get_data(self):
-        '''Retrieves the data associated with this indicator'''
+        """
+        Retrieves the data associated with an indicator
+        """
         return self.definition
     
     def update(self, indicator_properties=None):
-        '''Updates specified properties of an indicator'''
+        """
+        Updates properties of an initiative
+
+        :return:
+            A bool containing True (for success) or False (for failure). 
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Update an indicator successfully
+
+            indicator1_data = indicator1.get_data()
+            indicator1_data['optional'] = False
+            indicator1.update(indicator_properties=indicator1_data)
+
+            >> True
+
+            Refer the indicator definition (`get_data()`) to learn about fields that can be 
+            updated and their acceptable data format.
+
+        """
         try:
             _indicatorId = indicator_properties['id']
         except:
             return 'Indicator properties must include id of indicator'
         if indicator_properties is not None:
-            self._initiativedata['indicators'] = [indicator_properties if indicator['id']==_indicatorId else indicator for indicator in self._initiativedata['indicators']]
+            self._initiativedata['indicators'] = [dict(indicator_properties) if indicator['id']==_indicatorId else indicator for indicator in self._initiativedata['indicators']]
             _new_initiativedata = json.dumps(self._initiativedata)
             status = self._initiativeItem.update(item_properties={'text': _new_initiativedata})      
             if status:
@@ -307,7 +559,11 @@ class Indicator(collections.OrderedDict):
                 return status
     
 class IndicatorManager(object):
-    """Helper class for managing indicators within an initiative"""
+    """Helper class for managing indicators within an initiative. This class is not created by users directly. 
+    An instance of this class, called 'indicators', is available as a property of the Initiative object. Users
+    call methods on this 'indicators' object to manipulate (add, get, search, etc) indicators of a particular
+    initiative.
+    """
     def __init__(self, org, initiativeItem):
         self._org = org
         self._initiativeItem = initiativeItem
@@ -315,7 +571,41 @@ class IndicatorManager(object):
         self._indicators = self._initiativedata['indicators']
         
     def add(self, indicator_properties):
-        '''Adds a new indicator to given initiative'''
+        """
+        Adds a new indicator to given initiative.
+
+        *Key:Value Dictionary Options for Argument indicator_properties*
+
+        =================  =====================================================================
+        **Key**            **Value**
+        -----------------  ---------------------------------------------------------------------
+        id                 Required string. Indicator identifier within initiative template
+        -----------------  ---------------------------------------------------------------------
+        name               Optional string. Indicator name
+        -----------------  ---------------------------------------------------------------------
+        type               Optional string. Valid values are Data, Parameter.
+        -----------------  ---------------------------------------------------------------------
+        optional           Required boolean
+        -----------------  ---------------------------------------------------------------------
+        definition         Optional dictionary. Specification of the Indicator - types, fields
+        -----------------  ---------------------------------------------------------------------
+        source             Optional dictionary. Reference to an API or collection of data along 
+                           with mapping between schemas
+        =================  =====================================================================
+
+        :return:
+           A bool containing True (for success) or False (for failure).
+
+        .. code-block:: python
+
+            USAGE EXAMPLE: Add an indicator successfully
+
+            indicator1_data = {'id': 'streetCrashes', 'type': 'Data', 'optional':False}
+            initiative1.indicators.add(indicator_properties = indicator1_data)
+
+            >> True
+
+        """
         _stemplates = []
         _id = indicator_properties['id']
         _added = False
@@ -352,7 +642,18 @@ class IndicatorManager(object):
             return 'Invalid indicator id for this initiative'
     
     def get(self, indicator_id):
-        '''Fetch indicator for given indicator id'''
+        """ Returns the indicator object for the specified indicator_id.
+
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        indicator_id              Required string. The indicator identifier.
+        =======================    =============================================================
+
+        :return:
+            The indicator object if the indicator is found, None if the indicator is not found.
+
+        """
         for indicator in self._indicators:
             if indicator['id']==indicator_id:
                 _indicator = indicator
@@ -362,7 +663,24 @@ class IndicatorManager(object):
             return "Indicator doesn't exist or is inaccessible"
     
     def search(self, indicator_id=None, url=None, itemId=None, name=None):
-        '''Search for indicator'''
+        """ 
+        Searches for indicators within an initiative.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        indicator_id        Optional string. Indicator identifier.
+        ---------------     --------------------------------------------------------------------
+        url                 Optional string. url registered for indicator in `source` dictionary.
+        ---------------     --------------------------------------------------------------------
+        itemId              Optional string. itemId registered for indicator in `source` dictionary.
+        ---------------     --------------------------------------------------------------------
+        name                Optional string. name registered for indicator in `source` dictionary.
+        ===============     ====================================================================
+
+        :return:
+           A list of matching indicators.
+        """
         _indicators = []
         indicatorlist = []
         for indicator in self._indicators:
@@ -379,9 +697,13 @@ class IndicatorManager(object):
             indicatorlist.append(Indicator(self._initiativeItem, indicator))
         return indicatorlist
 
-
 class Event(collections.OrderedDict):
-    """Represents an event in a Hub"""
+    """
+    Represents an event in a Hub. A Hub has many Events that can be associated with an Initiative.
+    Events are meetings for people to support an Initiative. Events are scheduled by an organizer 
+    and have many attendees. An Event has a Group so that they can include content for preparation 
+    as well as gather and archive content during the event for later retrieval or analysis.
+    """
     def __init__(self, org, eventObject):
         '''Constructs an empty Event object'''
         self._org = org
@@ -454,14 +776,20 @@ class Event(collections.OrderedDict):
         return self._eventgeometry
     
 class EventManager(object):
-    """Helper class for managing events"""
+    """Helper class for managing events within a Hub. This class is not created by users directly. 
+    An instance of this class, called 'events', is available as a property of the Hub object. Users
+    call methods on this 'events' object to manipulate (add, get, search, get_map etc) events 
+    of a particular Hub. 
+    """
     def __init__(self, hub, event=None):
         self._org = hub.org
         if event:
             self._event = event
             
     def __all_events(self):
-        '''Fetches all initiatives for particular hub'''
+        """
+        Fetches all events for particular hub
+        """
         events = []
         _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
         _events_layer_url = _events_layer.url + '/0'
@@ -471,7 +799,24 @@ class EventManager(object):
         return events
     
     def search(self, initiative_id=None, title=None, location=None, organizerName=None):
-        '''Search for events'''
+        """ 
+        Searches for events within a Hub.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        initiative_id       Optional string. Initiative identifier.
+        ---------------     --------------------------------------------------------------------
+        title               Optional string.
+        ---------------     --------------------------------------------------------------------
+        location            Optional string. 
+        ---------------     --------------------------------------------------------------------
+        organizerName       Optional string.
+        ===============     ====================================================================
+
+        :return:
+           A list of matching indicators.
+        """
         events = []
         events = self.__all_events()
         if initiative_id!=None:
@@ -485,7 +830,9 @@ class EventManager(object):
         return events
     
     def get_map(self):
-        '''View all events on a map'''
+        """
+        Plot all events for a Hub in an embedded webmap within the notebook.
+        """
         _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
         event_map = self._org.map(zoomlevel=2)
         event_map.basemap = 'dark-gray'
