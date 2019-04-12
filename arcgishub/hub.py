@@ -90,6 +90,7 @@ class Hub(object):
         """
         Returns the url of the associated AGOL Enterprise Organization for an authorized GIS.
         """
+        try:
             self.org.properties.portalProperties.hub
             try:
                 self.org.properties.portalProperties.hub.settings.enterpriseOrg
@@ -233,12 +234,6 @@ class Initiative(collections.OrderedDict):
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        force               Optional bool. Available in ArcGIS Enterprise 10.6.1 and higher.
-                            Force deletion is applicable only to items that were orphaned when
-                            a server federated to the ArcGIS Enterprise was removed accidentally
-                            before properly unfederating it. When called on other items, it has
-                            no effect.
-        ---------------     --------------------------------------------------------------------
         dry_run             Optional bool. Available in ArcGIS Enterprise 10.6.1 and higher.If
                             True, checks if the item can be safely deleted and gives you back
                             either a dictionary with details. If dependent items are preventing
@@ -270,7 +265,7 @@ class Initiative(collections.OrderedDict):
             #Delete groups and initiative
             _collab_group.delete()
             _od_group.delete()
-            return self.item.delete(force=False, dry_run)
+            return self.item.delete(dry_run)
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
@@ -296,7 +291,7 @@ class Initiative(collections.OrderedDict):
 
 
         To find the list of applicable options for argument initiative_properties - 
-        https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update*
+        https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
 
         :return:
            A boolean indicating success (True) or failure (False).
@@ -523,7 +518,7 @@ class Indicator(collections.OrderedDict):
     @property
     def url(self):
         """
-        Returns the data url (if configured) of the indicator
+        Returns the data layer url (if configured) of the indicator
         """
         try:
             return self._indicatordict['source']['url']
@@ -853,7 +848,7 @@ class Event(collections.OrderedDict):
     @property
     def capacity(self):
         """
-        Returns seating capacity for attendees of the event
+        Returns attendance capacity for attendees of the event
         """
         return self._eventdict['capacity']
     
