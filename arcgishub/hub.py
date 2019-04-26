@@ -20,14 +20,7 @@ def _lazy_property(fn):
 class Hub(object):
     """
     Entry point into the Hub module. Lets you access an individual hub and its components.
-    .. code-block:: python
-
-    from arcgis.gis import GIS
-    gis = arcgis.gis.GIS("https://arcgis.com", "<username>", "<password>")
-    myHub = gis.hub
-    a_Initiative = myHub.initiatives.get(itemId)
-    a_Indicators = a_Initiative.indicators.search()
-    myEvents = myHub.events.search()
+       
 
     ================    ===============================================================
     **Argument**        **Description**
@@ -45,82 +38,82 @@ class Hub(object):
 
     """
     
-    def __init__(self, url, username=None, password=None):
-        self.url = url
+    def __init__(self, gis, username=None, password=None):
+        self.gis = gis
         self._username = username
         self._password = password
-        self.org = GIS(self.url, self._username, self._password)
+        self.gis = GIS(self.url, self._username, self._password)
         try:
-            self._org_id = self.org.properties.id
+            self._gis_id = self.gis.properties.id
         except AttributeError:
-            self._org_id = None
+            self._gis_id = None
             
     @property
-    def enterprise_orgId(self):
+    def enterprise_org_id(self):
         """
-        Returns the org id of the associated AGOL Enterprise Organization for an authorized GIS.
+        Returns the AGOL org id of the Enterprise Organization associated with this Hub.
         """
         try:
-            self.org.properties.portalProperties.hub
+            self.gis.properties.portalProperties.hub
             try:
-                return self.org.properties.portalProperties.hub.settings.enterpriseOrg.orgId
+                return self.gis.properties.portalProperties.hub.settings.enterpriseOrg.orgId
             except AttributeError: 
-                return self._org_id
+                return  self._gis_id
         except:
             print("Hub does not exist or is inaccessible.")
             raise
                         
     @property
-    def community_orgId(self):
+    def community_org_id(self):
         """
-        Returns the org id of the associated AGOL Community Organization for an authorized GIS.
+        Returns the AGOL org id of the Community Organization associated with this Hub.
         """
         try:
-            self.org.properties.portalProperties.hub
+            self.gis.properties.portalProperties.hub
             try:
-                return self.org.properties.portalProperties.hub.settings.communityOrg.orgId
+                return self.gis.properties.portalProperties.hub.settings.communityOrg.orgId
             except AttributeError:
-                return self._org_id
+                return  self._gis_id
         except:
             print("Hub does not exist or is inaccessible.")
             raise  
   
     @property
-    def enterprise_orgUrl(self):
+    def enterprise_org_url(self):
         """
-        Returns the url of the associated AGOL Enterprise Organization for an authorized GIS.
+        Returns the AGOL org url of the Enterprise Organization associated with this Hub.
         """
         try:
-            self.org.properties.portalProperties.hub
+            self.gis.properties.portalProperties.hub
             try:
-                self.org.properties.portalProperties.hub.settings.enterpriseOrg
+                self.gis.properties.portalProperties.hub.settings.enterpriseOrg
                 try:
-                    _url = self.org.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
+                    _url = self.gis.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
                 except:
-                    _url = self.org.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
+                    _url = self.gis.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
                 return "https://"+_url
             except AttributeError: 
-                return self.org.url
+                return self.gis.url
         except AttributeError:
             print("Hub does not exist or is inaccessible.")
             raise
         
     @property
-    def community_orgUrl(self):
+    def community_org_url(self):
         """
-        Returns the url of the associated AGOL Community Organization for an authorized GIS.
+        Returns the AGOL org id of the Community Organization associated with this Hub.
         """
         try:
-            self.org.properties.portalProperties.hub
+            self.gis.properties.portalProperties.hub
             try:
-                self.org.properties.portalProperties.hub.settings.communityOrg
+                self.gis.properties.portalProperties.hub.settings.communityOrg
                 try:
-                    _url = self.org.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
+                    _url = self.gis.properties.publicSubscriptionInfo.companionOrganizations[0]['organizationUrl']
                 except:
-                    _url = self.org.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
+                    _url = self.gis.properties.subscriptionInfo.companionOrganizations[0]['organizationUrl']
                 return "https://"+_url
             except AttributeError: 
-                return self.org.url
+                return self.gis.url
         except:
             print("Hub does not exist or is inaccessible.")
             raise
@@ -135,22 +128,22 @@ class Hub(object):
     @_lazy_property
     def events(self):
         """
-        The resource manager for Hub events. See :class:`~arcgis.apps.hub.EventsManager`.
+        The resource manager for Hub events. See :class:`~arcgis.apps.hub.EventManager`.
         """
         return EventManager(self)
     
 class Initiative(collections.OrderedDict):
     """
-    Represents an initiative within one's Hub. An Initiative supports 
+    Represents an initiative within a Hub. An Initiative supports 
     policy- or activity-oriented goals through workflows, tools and team collaboration.
     """
     
-    def __init__(self, org, initiativeItem):
+    def __init__(self, gis, initiativeItem):
         """
         Constructs an empty Initiative object
         """
         self.item = initiativeItem
-        self._org = org
+        self._gis = gis
         try:
             self._initiativedict = self.item.get_data()
             pmap = PropertyMap(self._initiativedict)
@@ -162,7 +155,7 @@ class Initiative(collections.OrderedDict):
         return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
        
     @property
-    def itemId(self):
+    def itemid(self):
         """
         Returns the item id of the initiative item
         """
@@ -203,6 +196,13 @@ class Initiative(collections.OrderedDict):
         Returns the owner of the initiative item
         """
         return self.item.owner
+
+    @property
+    def tags(self):
+        """
+        Returns the tags of the initiative item
+        """
+        return self.item.tags
     
     @property
     def url(self):
@@ -212,7 +212,7 @@ class Initiative(collections.OrderedDict):
         return self.item.properties['url']
     
     @property
-    def siteUrl(self):
+    def site_url(self):
         """
         Returns the url of the initiative site
         """
@@ -224,21 +224,11 @@ class Initiative(collections.OrderedDict):
         The resource manager for an Initiative's indicators. 
         See :class:`~arcgis.apps.hub.IndicatorManager`.
         """
-        return IndicatorManager(self._org, self.item)
+        return IndicatorManager(self._gis, self.item)
     
-    def delete(self, dry_run=False):
+    def delete(self):
         """
-        Deletes the initiative. If unable to delete, raises a RuntimeException. To know if you can 
-        safely delete the item, use the optional parameter 'dry_run'
-
-        ===============     ====================================================================
-        **Argument**        **Description**
-        ---------------     --------------------------------------------------------------------
-        dry_run             Optional bool. Available in ArcGIS Enterprise 10.6.1 and higher.If
-                            True, checks if the item can be safely deleted and gives you back
-                            either a dictionary with details. If dependent items are preventing
-                            deletion, a list of such Item objects are provided.
-        ===============     ====================================================================
+        Deletes the initiative. If unable to delete, raises a RuntimeException.
 
         :return:
             A bool containing True (for success) or False (for failure). 
@@ -255,17 +245,17 @@ class Initiative(collections.OrderedDict):
         if self.item is not None:
             #Fetch Initiative Collaboration group
             _collab_groupId = self.item.properties['groupId']
-            _collab_group = self._org.groups.get(_collab_groupId)
+            _collab_group = self._gis.groups.get(_collab_groupId)
             #Fetch Open Data Group
             _od_groupId = self.item.properties['openDataGroupId']
-            _od_group = self._org.groups.get(_od_groupId)
+            _od_group = self._gis.groups.get(_od_groupId)
             #Disable delete protection on groups
             _collab_group.protected = False
             _od_group.protected = False
             #Delete groups and initiative
             _collab_group.delete()
             _od_group.delete()
-            return self.item.delete(dry_run)
+            return self.item.delete()
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
@@ -320,7 +310,7 @@ class InitiativeManager(object):
     
     def __init__(self, hub, initiative=None):
         self._hub = hub
-        self._org = self._hub.org
+        self._gis = self._hub.gis
           
     def add(self, title, description=None, data=None, thumbnail=None):
         """ 
@@ -361,8 +351,8 @@ class InitiativeManager(object):
         _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Initiative Group", "initiativeCollaborationGroup"], "access":"org"}
         
         #Create groups
-        od_group = self._org.groups.create_from_dict(_od_group_dict)
-        collab_group = self._org.groups.create_from_dict(_collab_group_dict)
+        od_group =  self._gis.groups.create_from_dict(_od_group_dict)
+        collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
         
         #Protect groups from accidental deletion
         od_group.protected = True
@@ -374,14 +364,14 @@ class InitiativeManager(object):
             _item_dict['properties']['openDataGroupId'] = od_group.id
         
         #Create initiative and share it with collaboration group
-        item = self._org.content.add(_item_dict, owner=self._org.users.me.username)
+        item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         item.share(groups=[collab_group])
         
         #update initiative data
-        _item_data = {"assets": [{"id": "bannerImage","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._enterprise_orgUrl+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
-        return Initiative(self._org, item)
+        return Initiative(self._gis, item)
     
     def get(self, initiative_id):
         """ Returns the initiative object for the specified initiative_id.
@@ -389,7 +379,7 @@ class InitiativeManager(object):
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
-        initiative_id              Required string. The initiative identifier.
+        initiative_id              Required string. The initiative itemid.
         =======================    =============================================================
 
         :return:
@@ -403,13 +393,13 @@ class InitiativeManager(object):
             initiative1.item
 
         """
-        initiativeItem = self._org.content.get(initiative_id)
+        initiativeItem =    self._gis.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
-            return Initiative(self._org, initiativeItem)
+            return Initiative(self._gis, initiativeItem)
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
     
-    def search(self, scope=None, initiative_id=None, title=None, owner=None, created=None, modified=None, tags=None):
+    def search(self, scope=None, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for initiatives.
 
@@ -417,17 +407,17 @@ class InitiativeManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         scope               Optional string. Defines the scope of search.
-                            Valid values are official, community or all. Default is None.
-        ---------------     --------------------------------------------------------------------
-        initiative_id       Optional string. Initiative identifier.
+                            Valid values are 'official', 'community' or 'all'.
         ---------------     --------------------------------------------------------------------
         title               Optional string. Return initiatives with provided string in title.
         ---------------     --------------------------------------------------------------------
         owner               Optional string. Return initiatives owned by a username.
         ---------------     --------------------------------------------------------------------
-        created             Optional string. Date the initiative was created. In UNIX time.
+        created             Optional string. Date the initiative was created.
+                            Shown in milliseconds since UNIX epoch.
         ---------------     --------------------------------------------------------------------
-        modified            Optional string. Date the initiative was last modified. In UNIX time.
+        modified            Optional string. Date the initiative was last modified.
+                            Shown in milliseconds since UNIX epoch
         ---------------     --------------------------------------------------------------------
         tags                Optional string. User-defined tags that describe the initiative.
         ===============     ====================================================================
@@ -440,8 +430,6 @@ class InitiativeManager(object):
         
         #Build search query
         query = 'typekeywords:hubInitiative'
-        if initiative_id!=None:
-            query += ' AND id:'+initiative_id
         if title!=None:
             query += ' AND title:'+title
         if owner!=None:
@@ -454,24 +442,24 @@ class InitiativeManager(object):
             query += ' AND tags:'+tags
         
         #Apply org scope and search
-        if scope is None:
-            items = self._org.content.search(query=query, max_items=5000)
+        if scope is None or self._gis.url=='https://www.arcgis.com':
+            items = self._gis.content.search(query=query, max_items=5000)
         elif scope.lower()=='official':
             query += ' AND access:public'
-            _gis = GIS(self._hub.enterprise_orgUrl)
+            _gis = GIS(self._hub.enterprise_org_url)
             items = _gis.content.search(query=query, max_items=5000)
         elif scope.lower()=='community':
             query += ' AND access:public'
-            _gis = GIS(self._hub.community_orgUrl)
+            _gis = GIS(self._hub.community_org_url)
             items = _gis.content.search(query=query, max_items=5000)
         elif scope.lower()=='all':
-            items = self._org.content.search(query=query, outside_org=True, max_items=5000)
+            items = self._gis.content.search(query=query, outside_org=True, max_items=5000)
         else:
             raise Exception("Invalid value for scope")
             
         #Return searched initiatives
         for item in items:
-            initiativelist.append(Initiative(self._org, item))
+            initiativelist.append(Initiative(self._gis, item))
         return initiativelist
         
 class Indicator(collections.OrderedDict):
@@ -492,17 +480,17 @@ class Indicator(collections.OrderedDict):
         self.definition = pmap
             
     def __repr__(self):
-        return '<%s id:"%s" optional:%s>' % (type(self).__name__, self.indicatorId, self.optional)
+        return '<%s id:"%s" optional:%s>' % (type(self).__name__, self.indicatorid, self.optional)
        
     @property
-    def indicatorId(self):
+    def indicatorid(self):
         """
         Returns the id of the indicator
         """
         return self._indicatordict['id']
     
     @property
-    def indicatorType(self):
+    def indicator_type(self):
         """
         Returns the type (Data/Parameter) of the indicator
         """
@@ -536,7 +524,7 @@ class Indicator(collections.OrderedDict):
             return 'Name not available for this indicator'
         
     @property
-    def itemId(self):
+    def itemid(self):
         """
         Returns the item id of the data layer (if configured) of the indicator
         """
@@ -596,7 +584,7 @@ class Indicator(collections.OrderedDict):
 
             indicator1_data = indicator1.get_data()
             indicator1_data['optional'] = False
-            indicator1.update(indicator_properties=indicator1_data)
+            indicator1.update(indicator_properties = indicator1_data)
 
             >> True
 
@@ -622,8 +610,8 @@ class IndicatorManager(object):
     call methods on this 'indicators' object to manipulate (add, get, search, etc) indicators of a particular
     initiative.
     """
-    def __init__(self, org, initiativeItem):
-        self._org = org
+    def __init__(self, gis, initiativeItem):
+        self._gis = gis
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicators = self._initiativedata['indicators']
@@ -670,7 +658,7 @@ class IndicatorManager(object):
         
         #Fetch initiative template data
         _itemplateid = self._initiativedata['source']
-        _itemplate = self._org.content.get(_itemplateid)
+        _itemplate =    self._gis.content.get(_itemplateid)
         _itemplatedata = _itemplate.get_data()
         
         #Fetch solution templates associated with initiative template
@@ -680,7 +668,7 @@ class IndicatorManager(object):
         
         #Fetch data for each solution template
         for _stemplateid in _stemplates:
-            _stemplate = self._org.content.get(_stemplateid)
+            _stemplate =    self._gis.content.get(_stemplateid)
             _stemplatedata = _stemplate.get_data()
             
             #Check if indicator exists in solution
@@ -705,7 +693,7 @@ class IndicatorManager(object):
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
-        indicator_id              Required string. The indicator identifier.
+        indicator_id               Required string. The indicator identifier.
         =======================    =============================================================
 
         :return:
@@ -718,20 +706,18 @@ class IndicatorManager(object):
         try:
             return Indicator(self._initiativeItem, _indicator)
         except:
-            return "Indicator doesn't exist or is inaccessible"
+            return None
     
-    def search(self, indicator_id=None, url=None, itemId=None, name=None):
+    def search(self, url=None, item_id=None, name=None):
         """ 
         Searches for indicators within an initiative.
 
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        indicator_id        Optional string. Indicator identifier.
-        ---------------     --------------------------------------------------------------------
         url                 Optional string. url registered for indicator in `source` dictionary.
         ---------------     --------------------------------------------------------------------
-        itemId              Optional string. itemId registered for indicator in `source` dictionary.
+        item_id             Optional string. itemid registered for indicator in `source` dictionary.
         ---------------     --------------------------------------------------------------------
         name                Optional string. name registered for indicator in `source` dictionary.
         ===============     ====================================================================
@@ -743,12 +729,10 @@ class IndicatorManager(object):
         indicatorlist = []
         for indicator in self._indicators:
             _indicators.append(indicator)
-        if indicator_id!=None:
-            _indicators = [indicator for indicator in _indicators if indicator['id']==indicator_id]
         if url!=None:
             _indicators = [indicator for indicator in _indicators if indicator['source']['url']==url]
-        if itemId!=None:
-            _indicators = [indicator for indicator in _indicators if indicator['source']['itemId']==itemId]
+        if item_id!=None:
+            _indicators = [indicator for indicator in _indicators if indicator['source']['itemId']==item_id]
         if name!=None:
             _indicators = [indicator for indicator in _indicators if indicator['source']['name']==name]
         for indicator in _indicators:
@@ -762,11 +746,11 @@ class Event(collections.OrderedDict):
     and have many attendees. An Event has a Group so that they can include content for preparation 
     as well as gather and archive content during the event for later retrieval or analysis.
     """
-    def __init__(self, org, eventObject):
+    def __init__(self, gis, eventObject):
         """
         Constructs an empty Event object
         """
-        self._org = org
+        self._gis = gis
         self._eventgeometry = eventObject.geometry
         self._eventdict = eventObject.attributes
         pmap = PropertyMap(self._eventdict)
@@ -790,21 +774,21 @@ class Event(collections.OrderedDict):
         return self._eventdict['location'] 
     
     @property
-    def initiativeId(self):
+    def initiativeid(self):
         """
         Returns the initiative id of the event if it belongs to an Initiative
         """
         return self._eventdict['initiativeId'] 
     
     @property
-    def siteId(self):
+    def siteid(self):
         """
         Returns the site id of the event site
         """
         return self._eventdict['siteId']
     
     @property
-    def organizerName(self):
+    def organizer_name(self):
         """
         Returns the name of the organizer of the event
         """
@@ -825,16 +809,16 @@ class Event(collections.OrderedDict):
         return self._eventdict['description']
     
     @property
-    def startDate(self):
+    def start_date(self):
         """
-        Returns start date of the event in UNIX time
+        Returns start date of the event in milliseconds since UNIX epoch
         """
         return self._eventdict['startDate']
     
     @property
-    def endDate(self):
+    def end_date(self):
         """
-        Returns end date of the event in UNIX time
+        Returns end date of the event in milliseconds since UNIX epoch
         """
         return self._eventdict['endDate']
     
@@ -867,7 +851,7 @@ class Event(collections.OrderedDict):
         return self._eventdict['status']
     
     @property
-    def isCancelled(self):
+    def is_cancelled(self):
         """
         Check if event is Cancelled
         """
@@ -883,40 +867,40 @@ class Event(collections.OrderedDict):
 class EventManager(object):
     """Helper class for managing events within a Hub. This class is not created by users directly. 
     An instance of this class, called 'events', is available as a property of the Hub object. Users
-    call methods on this 'events' object to manipulate (add, get, search, get_map etc) events 
+    call methods on this 'events' object to manipulate (add, search, get_map etc) events 
     of a particular Hub. 
     """
     def __init__(self, hub, event=None):
-        self._org = hub.org
+        self._gis = hub.gis
         if event:
             self._event = event
             
     def __all_events(self):
         """
-        Fetches all events for particular hub
+        Fetches all events for particular hub.
         """
         events = []
-        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        _events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
         _events_layer_url = _events_layer.url + '/0'
         _events_data = FeatureLayer(_events_layer_url).query().features
         for event in _events_data:
-            events.append(Event(self._org, event))
+            events.append(Event(self._gis, event))
         return events
     
-    def search(self, initiative_id=None, title=None, location=None, organizerName=None):
+    def search(self, initiative_id=None, title=None, location=None, organizer_name=None):
         """ 
         Searches for events within a Hub.
 
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        initiative_id       Optional string. Initiative identifier.
+        initiative_id       Optional string. Initiative itemid.
         ---------------     --------------------------------------------------------------------
-        title               Optional string.
+        title               Optional string. Title of the event.
         ---------------     --------------------------------------------------------------------
-        location            Optional string. 
+        location            Optional string. Location where event is held.
         ---------------     --------------------------------------------------------------------
-        organizerName       Optional string.
+        organizer_name      Optional string. Name of the organizer of the event.
         ===============     ====================================================================
 
         :return:
@@ -925,21 +909,21 @@ class EventManager(object):
         events = []
         events = self.__all_events()
         if initiative_id!=None:
-            events = [event for event in events if initiative_id==event.initiativeId]
+            events = [event for event in events if initiative_id==event.initiativeid]
         if title!=None:
             events = [event for event in events if title in event.title]
         if location!=None:
             events = [event for event in events if location in event.location]
-        if organizerName!=None:
-            events = [event for event in events if organizerName==event.organizerName]
+        if organizer_name!=None:
+            events = [event for event in events if organizer_name==event.organizer_name]
         return events
     
     def get_map(self):
         """
         Plot all events for a Hub in an embedded webmap within the notebook.
         """
-        _events_layer = self._org.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
-        event_map = self._org.map(zoomlevel=2)
+        _events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        event_map = self._gis.map(zoomlevel=2)
         event_map.basemap = 'dark-gray'
         event_map.add_layer(_events_layer, {'title':'Event locations for this Hub','opacity':0.7})
         return event_map
