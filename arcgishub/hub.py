@@ -1,7 +1,9 @@
 from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis._impl.common._mixins import PropertyMap
+from arcgishub.sites import SiteManager
 import collections
+import requests
 import json
 
 def _lazy_property(fn):
@@ -21,7 +23,6 @@ class Hub(object):
     """
     Entry point into the Hub module. Lets you access an individual hub and its components.
        
-
     ================    ===============================================================
     **Argument**        **Description**
     ----------------    ---------------------------------------------------------------
@@ -35,13 +36,13 @@ class Hub(object):
                         provided, a password is expected.  This is case-sensitive. If the password 
                         is not provided, the user is prompted in the interactive dialog.
     ================    ===============================================================
-
     """
     
-    def __init__(self, gis, username=None, password=None):
-        self.gis = gis
+    def __init__(self, url, username=None, password=None):
+        #self.gis = gis
         self._username = username
         self._password = password
+        self.url = url
         self.gis = GIS(self.url, self._username, self._password)
         try:
             self._gis_id = self.gis.properties.id
@@ -132,6 +133,13 @@ class Hub(object):
         """
         return EventManager(self)
     
+    @_lazy_property
+    def sites(self):
+        """
+        The resource manager for Hub sites. See :class:`~hub.sites.SiteManager`.
+        """
+        return SiteManager(self.gis)
+
 class Initiative(collections.OrderedDict):
     """
     Represents an initiative within a Hub. An Initiative supports 
@@ -218,28 +226,73 @@ class Initiative(collections.OrderedDict):
         """
         return self.item.url
     
+    @property
+    def opendata_group_id(self):
+        """
+        Returns the groupId for the content (open data) group
+        """
+        return self.item.properties['openDataGroupId']
+    
+    @property
+    def collab_group_id(self):
+        """
+        Returns the groupId for the content (open data) group
+        """
+        return self.item.properties['groupId']
+    
     @_lazy_property
     def indicators(self):
         """
         The resource manager for an Initiative's indicators. 
-        See :class:`~arcgis.apps.hub.IndicatorManager`.
+        See :class:`~hub.hub.IndicatorManager`.
         """
         return IndicatorManager(self._gis, self.item)
+
+    @_lazy_property
+    def sites(self):
+        """
+        The resource manager for an Initiative's sites. 
+        See :class:`~hub.sites.SiteManager`.
+        """
+        return SiteManager(self._gis, self.item)
+    
+    def followers(self, community_gis=None):
+        """
+        Fetches the list of followers for initiative. 
+        """
+        followers = []
+        _email = False
+        _users_e = self._gis.users.search(query='hubInitiativeId|'+self.itemid, outside_org=True)
+        if community_gis is not None:
+            _users_c = community_gis.users.search(query='hubInitiativeId|'+self.itemid, outside_org=True)
+            _email = True
+        for _user in _users_e:
+            _temp = {}
+            _temp['name'] = _user.fullName
+            _temp['username'] = _user.username
+            if _email:
+                try:
+                    _temp['email'] = _user.email
+                except AttributeError:
+                    for _user_c in _users_c:
+                        if _user_c.username==_user.username:
+                            try:
+                                _temp['email'] = _user_c.email
+                            except AttributeError:
+                                pass
+            followers.append(_temp)
+        return followers
+            
     
     def delete(self):
         """
         Deletes the initiative. If unable to delete, raises a RuntimeException.
-
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Delete an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.delete()
-
             >> True
         """
         if self.item is not None:
@@ -259,14 +312,10 @@ class Initiative(collections.OrderedDict):
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
-
-
         .. note::
             For initiative_properties, pass in arguments for only the properties you want to be updated.
             All other properties will be untouched.  For example, if you want to update only the
             initiative's description, then only provide the description argument in initiative_properties.
-
-
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -278,21 +327,14 @@ class Initiative(collections.OrderedDict):
         ---------------------     --------------------------------------------------------------------
         metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
-
-
         To find the list of applicable options for argument initiative_properties - 
         https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
-
         :return:
            A boolean indicating success (True) or failure (False).
-
         .. code-block:: python
-
             USAGE EXAMPLE: Update an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.update(initiative_properties={'description':'Create your own initiative to organize people around a shared goal.'})
-
             >> True
         """
         if initiative_properties:
@@ -315,7 +357,6 @@ class InitiativeManager(object):
     def add(self, title, description=None, data=None, thumbnail=None):
         """ 
         Adds a new initiative to the Hub.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -327,14 +368,10 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         thumbnail           Optional string. Either a path or URL to a thumbnail image.
         ===============     ====================================================================
-
         :return:
            The initiative if successfully added, None if unsuccessful.
-
         .. code-block:: python
-
             USAGE EXAMPLE: Add an initiative successfully
-
             initiative1 = myHub.initiatives.add(title='Vision Zero Analysis')
             initiative1.item
         """
@@ -366,6 +403,11 @@ class InitiativeManager(object):
         #Create initiative and share it with collaboration group
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         item.share(groups=[collab_group])
+
+        #Create initiative site and set initiative url
+        _initiative = Initiative(self._gis, item)
+        site = _initiative.sites.add(title=title, domain=title)
+        item.update(item_properties={'url': site.url})
         
         #update initiative data
         _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
@@ -375,23 +417,17 @@ class InitiativeManager(object):
     
     def get(self, initiative_id):
         """ Returns the initiative object for the specified initiative_id.
-
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         initiative_id              Required string. The initiative itemid.
         =======================    =============================================================
-
         :return:
             The initiative object if the item is found, None if the item is not found.
-
         .. code-block:: python
-
             USAGE EXAMPLE: Fetch an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.item
-
         """
         initiativeItem =    self._gis.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
@@ -402,7 +438,6 @@ class InitiativeManager(object):
     def search(self, scope=None, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for initiatives.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -421,7 +456,6 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         tags                Optional string. User-defined tags that describe the initiative.
         ===============     ====================================================================
-
         :return:
            A list of matching initiatives.
         """
@@ -546,17 +580,12 @@ class Indicator(collections.OrderedDict):
     def delete(self):
         """
         Deletes an indicator from the initiative
-
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Delete an indicator successfully
-
             indicator1 = initiative1.indicators.get('streetCrashes')
             indicator1.delete()
-
             >> True
         """
         if self._indicatordict is not None:
@@ -574,23 +603,16 @@ class Indicator(collections.OrderedDict):
     def update(self, indicator_properties=None):
         """
         Updates properties of an initiative
-
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Update an indicator successfully
-
             indicator1_data = indicator1.get_data()
             indicator1_data['optional'] = False
             indicator1.update(indicator_properties = indicator1_data)
-
             >> True
-
             Refer the indicator definition (`get_data()`) to learn about fields that can be 
             updated and their acceptable data format.
-
         """
         try:
             _indicatorId = indicator_properties['id']
@@ -619,9 +641,7 @@ class IndicatorManager(object):
     def add(self, indicator_properties):
         """
         Adds a new indicator to given initiative.
-
         *Key:Value Dictionary Options for Argument indicator_properties*
-
         =================  =====================================================================
         **Key**            **Value**
         -----------------  ---------------------------------------------------------------------
@@ -638,19 +658,13 @@ class IndicatorManager(object):
         source             Optional dictionary. Reference to an API or collection of data along 
                            with mapping between schemas
         =================  =====================================================================
-
         :return:
            A bool containing True (for success) or False (for failure).
-
         .. code-block:: python
-
             USAGE EXAMPLE: Add an indicator successfully
-
             indicator1_data = {'id': 'streetCrashes', 'type': 'Data', 'optional':False}
             initiative1.indicators.add(indicator_properties = indicator1_data)
-
             >> True
-
         """
         _stemplates = []
         _id = indicator_properties['id']
@@ -689,16 +703,13 @@ class IndicatorManager(object):
     
     def get(self, indicator_id):
         """ Returns the indicator object for the specified indicator_id.
-
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         indicator_id               Required string. The indicator identifier.
         =======================    =============================================================
-
         :return:
             The indicator object if the indicator is found, None if the indicator is not found.
-
         """
         for indicator in self._indicators:
             if indicator['id']==indicator_id:
@@ -711,7 +722,6 @@ class IndicatorManager(object):
     def search(self, url=None, item_id=None, name=None):
         """ 
         Searches for indicators within an initiative.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -721,7 +731,6 @@ class IndicatorManager(object):
         ---------------     --------------------------------------------------------------------
         name                Optional string. name registered for indicator in `source` dictionary.
         ===============     ====================================================================
-
         :return:
            A list of matching indicators.
         """
@@ -890,7 +899,6 @@ class EventManager(object):
     def search(self, initiative_id=None, title=None, location=None, organizer_name=None):
         """ 
         Searches for events within a Hub.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -902,7 +910,6 @@ class EventManager(object):
         ---------------     --------------------------------------------------------------------
         organizer_name      Optional string. Name of the organizer of the event.
         ===============     ====================================================================
-
         :return:
            A list of matching indicators.
         """
