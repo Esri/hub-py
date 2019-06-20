@@ -26,7 +26,7 @@ class Site(collections.OrderedDict):
     
     def __init__(self, gis, siteItem):
         """
-        Constructs an empty Initiative object
+        Constructs an empty Site object
         """
         self.item = siteItem
         self._gis = gis
@@ -85,7 +85,86 @@ class Site(collections.OrderedDict):
         Returns the url of the site
         """
         return self.item.url
-    
+
+    def copy(self, title=None, tags=None, snippet=None, description=None):
+        """
+        Copy allows for the creation of a site that is derived from the current site.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        title               Optional string. The name of the new site.
+        ---------------     --------------------------------------------------------------------
+        tags                Optional list of string. Descriptive words that help in the 
+                            searching and locating of the published information.
+        ---------------     --------------------------------------------------------------------
+        snippet             Optional string. A brief summary of the information being published.
+        ---------------     --------------------------------------------------------------------
+        description         Optional string. A long description of the Item being published.
+        ===============     ====================================================================
+        :return:
+           Site.
+        """
+        _copied_site = self.item.copy(title, tags, snippet, description)
+        return Site(self._gis, _copied_site)
+
+
+    def update(self, site_properties=None, data=None, thumbnail=None, metadata=None):
+        """ Updates the initiative.
+        .. note::
+            For site_properties, pass in arguments for only the properties you want to be updated.
+            All other properties will be untouched.  For example, if you want to update only the
+            site's description, then only provide the description argument in site_properties.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        site_properties           Required dictionary. See URL below for the keys and values.
+        ---------------------     --------------------------------------------------------------------
+        data                      Optional string. Either a path or URL to the data.
+        ---------------------     --------------------------------------------------------------------
+        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
+        ---------------------     --------------------------------------------------------------------
+        metadata                  Optional string. Either a path or URL to the metadata.
+        =====================     ====================================================================
+        To find the list of applicable options for argument site_properties - 
+        https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
+        :return:
+           A boolean indicating success (True) or failure (False).
+        .. code-block:: python
+            USAGE EXAMPLE: Update a site successfully
+            site1 = myHub.sites.get('itemId12345')
+            site1.update(site_properties={'description':'Create your own initiative to organize people around a shared goal.'})
+            >> True
+        """
+        if site_properties:
+            _site_data = self.definition
+            for key, value in site_properties.items():
+                _site_data[key] = value
+            return self.item.update(_site_data, data, thumbnail, metadata)
+
+    def delete(self):
+        """
+        Deletes the site. If unable to delete, raises a RuntimeException.
+        :return:
+            A bool containing True (for success) or False (for failure). 
+        .. code-block:: python
+            USAGE EXAMPLE: Delete a site successfully
+            site1 = myHub.sites.get('itemId12345')
+            site1.delete()
+            >> True
+        """
+        if self.item is not None:
+            #Fetch site data
+            _site_data = self.definition
+            #Disable delete protection on site
+            self.item.protected = False
+            #Delete domain entry
+            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+            _delete_domain = requests.delete('https://hub.arcgis.com/utilities/domains/'+_site_data['values']['siteId'], headers = _HEADERS)
+            if _delete_domain.status_code==200:
+                #Delete site item
+                return self.item.delete()
+ 
 class SiteManager(object):
     """
     Helper class for managing sites within a Hub. This class is not created by users directly. 
@@ -141,22 +220,25 @@ class SiteManager(object):
 
         #Domain manipulation
         domain = self._gis.url[:8] + domain_str + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
-        _request_url = 'https://hub.arcgis.com/utilities/domains?orgId='+domain[8:]
+        _request_url = 'https://hub.arcgis.com/utilities/domains/'+domain[8:]
         _response = requests.get(_request_url)
         
         #Check if domain doesn't exist
-        try:
-            if _response.status_code==404:
-                pass
-        except:
-        #If exists check if counter needs updating and update it
-            try:
-                count = int(domain_str[-1])
-                count = count + 1
-                domain_str = domain_str[:-1] + str(count)
-            except:
-                domain_str = domain_str + '1'
-        domain = self._gis.url[:8] + domain_str + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+        if _response.status_code==404:
+            pass
+        else:
+        #If exists check if counter needs updating and update it for initiative sites
+            if _datafile == 'init-sites-data.json':
+                try:
+                    count = int(domain_str[-1])
+                    count = count + 1
+                    domain_str = domain_str[:-1] + str(count)
+                except:
+                    domain_str = domain_str + '1'
+                domain = self._gis.url[:8] + domain_str + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+            else:
+                #Request another subdomain for opendata sites
+                raise ValueError("You already have a site that uses this subdomain. Please provide another subdomain.")
 
         #Create site item, share with group
         site = self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
@@ -267,6 +349,6 @@ class SiteManager(object):
         items = self._gis.content.search(query=query, max_items=5000)
         
         #Return searched sites
-        for site in sites:
-            sitelist.append(Site(self._gis, site))
+        for item in items:
+            sitelist.append(Site(self._gis, item))
         return sitelist
