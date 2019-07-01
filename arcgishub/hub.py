@@ -213,11 +213,22 @@ class Initiative(collections.OrderedDict):
         return self.item.tags
     
     @property
-    def url(self):
+    def initiative_url(self):
         """
         Returns the url of the initiative editor
         """
         return self.item.properties['url']
+
+    @property 
+    def site_id(self):
+        """
+        Returns the itemid of the initiative site
+        """
+        return self.item.properties['siteId']
+
+    @site_id.setter
+    def site_id(self, value):
+        self.item.properties['siteId'] = value
     
     @property
     def site_url(self):
@@ -225,6 +236,10 @@ class Initiative(collections.OrderedDict):
         Returns the url of the initiative site
         """
         return self.item.url
+
+    @site_url.setter
+    def site_url(self, value):
+        self.item.url = value
     
     @property
     def opendata_group_id(self):
@@ -302,12 +317,17 @@ class Initiative(collections.OrderedDict):
             #Fetch Open Data Group
             _od_groupId = self.item.properties['openDataGroupId']
             _od_group = self._gis.groups.get(_od_groupId)
-            #Disable delete protection on groups
+            #Fetch initiative site
+            _site_id = self.definition['steps'][0]['itemIds'][0]
+            _site = self.sites.get(_site_id)
+            #Disable delete protection on groups and site
             _collab_group.protected = False
             _od_group.protected = False
-            #Delete groups and initiative
+            _site.protected = False
+            #Delete groups, site and initiative
             _collab_group.delete()
             _od_group.delete()
+            _site.delete()
             return self.item.delete()
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
@@ -404,13 +424,15 @@ class InitiativeManager(object):
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         item.share(groups=[collab_group])
 
-        #Create initiative site and set initiative url
+        #Create initiative site and set initiative properties
         _initiative = Initiative(self._gis, item)
-        site = _initiative.sites.add(title=title, domain=title)
+        site = _initiative.sites.add(title=title, subdomain=title)
         item.update(item_properties={'url': site.url})
+        #_initiative.site_url = site.url
+        item.properties['site_id'] = site.itemid
         
         #update initiative data
-        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": [site.itemid]},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
         return Initiative(self._gis, item)
@@ -889,7 +911,7 @@ class EventManager(object):
         Fetches all events for particular hub.
         """
         events = []
-        _events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
+        _events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=10000)[0]
         _events_layer_url = _events_layer.url + '/0'
         _events_data = FeatureLayer(_events_layer_url).query().features
         for event in _events_data:
