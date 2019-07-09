@@ -38,8 +38,8 @@ class Hub(object):
 
     """
     
-    def __init__(self, gis, username=None, password=None):
-        self.gis = gis
+    def __init__(self, url, username=None, password=None):
+        self.url = url
         self._username = username
         self._password = password
         self.gis = GIS(self.url, self._username, self._password)
