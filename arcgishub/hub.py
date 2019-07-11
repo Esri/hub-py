@@ -2,6 +2,7 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis._impl.common._mixins import PropertyMap
 from arcgishub.sites import SiteManager
+from datetime import datetime
 import collections
 import requests
 import json
@@ -225,10 +226,6 @@ class Initiative(collections.OrderedDict):
         Returns the itemid of the initiative site
         """
         return self.item.properties['siteId']
-
-    @site_id.setter
-    def site_id(self, value):
-        self.item.properties['siteId'] = value
     
     @property
     def site_url(self):
@@ -236,10 +233,6 @@ class Initiative(collections.OrderedDict):
         Returns the url of the initiative site
         """
         return self.item.url
-
-    @site_url.setter
-    def site_url(self, value):
-        self.item.url = value
     
     @property
     def opendata_group_id(self):
@@ -297,8 +290,7 @@ class Initiative(collections.OrderedDict):
                                 pass
             followers.append(_temp)
         return followers
-            
-    
+
     def delete(self):
         """
         Deletes the initiative. If unable to delete, raises a RuntimeException.
@@ -374,7 +366,7 @@ class InitiativeManager(object):
         self._hub = hub
         self._gis = self._hub.gis
           
-    def add(self, title, description=None, data=None, thumbnail=None):
+    def add(self, title, description=None, site=None, data=None, thumbnail=None):
         """ 
         Adds a new initiative to the Hub.
         ===============     ====================================================================
@@ -383,6 +375,8 @@ class InitiativeManager(object):
         title               Required string.
         ---------------     --------------------------------------------------------------------
         description         Optional string. 
+        ---------------     --------------------------------------------------------------------
+        site                Optional Site object. 
         ---------------     --------------------------------------------------------------------
         data                Optional string. Either a path or URL to the data.
         ---------------     --------------------------------------------------------------------
@@ -426,9 +420,12 @@ class InitiativeManager(object):
 
         #Create initiative site and set initiative properties
         _initiative = Initiative(self._gis, item)
-        site = _initiative.sites.add(title=title, subdomain=title)
+        if site is None:
+            site = _initiative.sites.add(title=title, subdomain=title)
+        else:
+            site = self._hub.sites.clone(site, title)
         item.update(item_properties={'url': site.url})
-        #_initiative.site_url = site.url
+        _initiative.site_url = site.item.url
         item.properties['site_id'] = site.itemid
         
         #update initiative data
@@ -436,6 +433,28 @@ class InitiativeManager(object):
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
         return Initiative(self._gis, item)
+
+    def clone(self, initiative, title=None):
+        """
+        Clone allows for the creation of a site that is derived from the current site.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        initiative          Required Initiative object of site to be cloned.
+        ---------------     --------------------------------------------------------------------
+        title               Optional String.
+        ===============     ====================================================================
+        :return:
+           Initiative.
+        """
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        if title is None:
+            title = initiative.title + "-copy-%s" % int(now.timestamp() * 1000)
+        site = self.get(initiative.site_id)
+        new_initiative = self._hub.initiatives.add(title=title, site=site)
+        return new_initiative
     
     def get(self, initiative_id):
         """ Returns the initiative object for the specified initiative_id.
