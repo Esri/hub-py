@@ -40,7 +40,15 @@ myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or th
 myHub.initiatives.search()
 ```
 
-fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki/Implemented-methods) for more information about the functionality supported.
+fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki) for more information and API reference about the functionality supported.
+
+### User Guides
+
+Example notebooks for using this API to work with your Hub are provided in the [examples](https://github.com/esridc/hub-py/tree/master/examples) directory.
+
+If you are using the most recent version of the [ArcGIS API for Python](https://developers.arcgis.com/python/) you can find user guides to access Hub using it, under the [For ArcGIS API for Python](https://github.com/esridc/hub-py/tree/master/examples/For%20ArcGIS%20API%20for%20Python) subdirectory.
+
+If you choose to work with `arcgishub` instead, you will find the above examples and functionality supported in this API. User guides for any new functionality supported by `arcgishub` can be found under the [For arcgishub](https://github.com/esridc/hub-py/tree/master/examples/For%20arcgishub) folder.
 
 
 ### Future versions will allow:
