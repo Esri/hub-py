@@ -1,7 +1,11 @@
 from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
+from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
+from arcgishub.sites import SiteManager
+from datetime import datetime
 import collections
+import requests
 import json
 
 def _lazy_property(fn):
@@ -21,7 +25,6 @@ class Hub(object):
     """
     Entry point into the Hub module. Lets you access an individual hub and its components.
        
-
     ================    ===============================================================
     **Argument**        **Description**
     ----------------    ---------------------------------------------------------------
@@ -35,13 +38,13 @@ class Hub(object):
                         provided, a password is expected.  This is case-sensitive. If the password 
                         is not provided, the user is prompted in the interactive dialog.
     ================    ===============================================================
-
     """
     
     def __init__(self, url, username=None, password=None):
-        self.url = url
+        #self.gis = gis
         self._username = username
         self._password = password
+        self.url = url
         self.gis = GIS(self.url, self._username, self._password)
         try:
             self._gis_id = self.gis.properties.id
@@ -132,6 +135,13 @@ class Hub(object):
         """
         return EventManager(self)
     
+    @_lazy_property
+    def sites(self):
+        """
+        The resource manager for Hub sites. See :class:`~hub.sites.SiteManager`.
+        """
+        return SiteManager(self.gis)
+
 class Initiative(collections.OrderedDict):
     """
     Represents an initiative within a Hub. An Initiative supports 
@@ -205,11 +215,18 @@ class Initiative(collections.OrderedDict):
         return self.item.tags
     
     @property
-    def url(self):
+    def initiative_url(self):
         """
         Returns the url of the initiative editor
         """
         return self.item.properties['url']
+
+    @property 
+    def site_id(self):
+        """
+        Returns the itemid of the initiative site
+        """
+        return self.item.properties['siteId']
     
     @property
     def site_url(self):
@@ -218,28 +235,72 @@ class Initiative(collections.OrderedDict):
         """
         return self.item.url
     
+    @property
+    def opendata_group_id(self):
+        """
+        Returns the groupId for the content (open data) group
+        """
+        return self.item.properties['openDataGroupId']
+    
+    @property
+    def collab_group_id(self):
+        """
+        Returns the groupId for the content (open data) group
+        """
+        return self.item.properties['groupId']
+    
     @_lazy_property
     def indicators(self):
         """
         The resource manager for an Initiative's indicators. 
-        See :class:`~arcgis.apps.hub.IndicatorManager`.
+        See :class:`~hub.hub.IndicatorManager`.
         """
         return IndicatorManager(self._gis, self.item)
+
+    @_lazy_property
+    def sites(self):
+        """
+        The resource manager for an Initiative's sites. 
+        See :class:`~hub.sites.SiteManager`.
+        """
+        return SiteManager(self._gis, self.item)
     
+    def followers(self, community_gis=None):
+        """
+        Fetches the list of followers for initiative. 
+        """
+        followers = []
+        _email = False
+        _users_e = self._gis.users.search(query='hubInitiativeId|'+self.itemid, outside_org=True)
+        if community_gis is not None:
+            _users_c = community_gis.users.search(query='hubInitiativeId|'+self.itemid, outside_org=True)
+            _email = True
+        for _user in _users_e:
+            _temp = {}
+            _temp['name'] = _user.fullName
+            _temp['username'] = _user.username
+            if _email:
+                try:
+                    _temp['email'] = _user.email
+                except AttributeError:
+                    for _user_c in _users_c:
+                        if _user_c.username==_user.username:
+                            try:
+                                _temp['email'] = _user_c.email
+                            except AttributeError:
+                                pass
+            followers.append(_temp)
+        return followers
+
     def delete(self):
         """
         Deletes the initiative. If unable to delete, raises a RuntimeException.
-
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Delete an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.delete()
-
             >> True
         """
         if self.item is not None:
@@ -249,24 +310,25 @@ class Initiative(collections.OrderedDict):
             #Fetch Open Data Group
             _od_groupId = self.item.properties['openDataGroupId']
             _od_group = self._gis.groups.get(_od_groupId)
-            #Disable delete protection on groups
+            #Fetch initiative site
+            _site_id = self.definition['steps'][0]['itemIds'][0]
+            _site = self.sites.get(_site_id)
+            #Disable delete protection on groups and site
             _collab_group.protected = False
             _od_group.protected = False
-            #Delete groups and initiative
+            _site.protected = False
+            #Delete groups, site and initiative
             _collab_group.delete()
             _od_group.delete()
+            _site.delete()
             return self.item.delete()
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
-
-
         .. note::
             For initiative_properties, pass in arguments for only the properties you want to be updated.
             All other properties will be untouched.  For example, if you want to update only the
             initiative's description, then only provide the description argument in initiative_properties.
-
-
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -278,21 +340,14 @@ class Initiative(collections.OrderedDict):
         ---------------------     --------------------------------------------------------------------
         metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
-
-
         To find the list of applicable options for argument initiative_properties - 
         https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
-
         :return:
            A boolean indicating success (True) or failure (False).
-
         .. code-block:: python
-
             USAGE EXAMPLE: Update an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.update(initiative_properties={'description':'Create your own initiative to organize people around a shared goal.'})
-
             >> True
         """
         if initiative_properties:
@@ -312,10 +367,9 @@ class InitiativeManager(object):
         self._hub = hub
         self._gis = self._hub.gis
           
-    def add(self, title, description=None, data=None, thumbnail=None):
+    def add(self, title, description=None, site=None, data=None, thumbnail=None):
         """ 
         Adds a new initiative to the Hub.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -323,18 +377,16 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         description         Optional string. 
         ---------------     --------------------------------------------------------------------
+        site                Optional Site object. 
+        ---------------     --------------------------------------------------------------------
         data                Optional string. Either a path or URL to the data.
         ---------------     --------------------------------------------------------------------
         thumbnail           Optional string. Either a path or URL to a thumbnail image.
         ===============     ====================================================================
-
         :return:
            The initiative if successfully added, None if unsuccessful.
-
         .. code-block:: python
-
             USAGE EXAMPLE: Add an initiative successfully
-
             initiative1 = myHub.initiatives.add(title='Vision Zero Analysis')
             initiative1.item
         """
@@ -366,32 +418,59 @@ class InitiativeManager(object):
         #Create initiative and share it with collaboration group
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         item.share(groups=[collab_group])
+
+        #Create initiative site and set initiative properties
+        _initiative = Initiative(self._gis, item)
+        if site is None:
+            site = _initiative.sites.add(title=title, subdomain=title)
+        else:
+            site = self._hub.sites.clone(site, title)
+        item.update(item_properties={'url': site.url})
+        _initiative.site_url = site.item.url
+        item.properties['site_id'] = site.itemid
         
         #update initiative data
-        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": []},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": [site.itemid]},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
         return Initiative(self._gis, item)
+
+    def clone(self, initiative, title=None):
+        """
+        Clone allows for the creation of a site that is derived from the current site.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        initiative          Required Initiative object of site to be cloned.
+        ---------------     --------------------------------------------------------------------
+        title               Optional String.
+        ===============     ====================================================================
+        :return:
+           Initiative.
+        """
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        if title is None:
+            title = initiative.title + "-copy-%s" % int(now.timestamp() * 1000)
+        site = self.get(initiative.site_id)
+        new_initiative = self._hub.initiatives.add(title=title, site=site)
+        return new_initiative
     
     def get(self, initiative_id):
-        """ Returns the initiative object for the specified initiative_id.
-
+        """ 
+        Returns the initiative object for the specified initiative_id.
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         initiative_id              Required string. The initiative itemid.
         =======================    =============================================================
-
         :return:
             The initiative object if the item is found, None if the item is not found.
-
         .. code-block:: python
-
             USAGE EXAMPLE: Fetch an initiative successfully
-
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.item
-
         """
         initiativeItem =    self._gis.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
@@ -402,7 +481,6 @@ class InitiativeManager(object):
     def search(self, scope=None, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for initiatives.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -421,7 +499,6 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         tags                Optional string. User-defined tags that describe the initiative.
         ===============     ====================================================================
-
         :return:
            A list of matching initiatives.
         """
@@ -546,17 +623,12 @@ class Indicator(collections.OrderedDict):
     def delete(self):
         """
         Deletes an indicator from the initiative
-
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Delete an indicator successfully
-
             indicator1 = initiative1.indicators.get('streetCrashes')
             indicator1.delete()
-
             >> True
         """
         if self._indicatordict is not None:
@@ -573,24 +645,17 @@ class Indicator(collections.OrderedDict):
     
     def update(self, indicator_properties=None):
         """
-        Updates properties of an initiative
-
+        Updates properties of an indicator
         :return:
             A bool containing True (for success) or False (for failure). 
-
         .. code-block:: python
-
             USAGE EXAMPLE: Update an indicator successfully
-
             indicator1_data = indicator1.get_data()
             indicator1_data['optional'] = False
             indicator1.update(indicator_properties = indicator1_data)
-
             >> True
-
             Refer the indicator definition (`get_data()`) to learn about fields that can be 
             updated and their acceptable data format.
-
         """
         try:
             _indicatorId = indicator_properties['id']
@@ -612,6 +677,7 @@ class IndicatorManager(object):
     """
     def __init__(self, gis, initiativeItem):
         self._gis = gis
+        self._hub = self._gis.hub
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicators = self._initiativedata['indicators']
@@ -619,9 +685,7 @@ class IndicatorManager(object):
     def add(self, indicator_properties):
         """
         Adds a new indicator to given initiative.
-
         *Key:Value Dictionary Options for Argument indicator_properties*
-
         =================  =====================================================================
         **Key**            **Value**
         -----------------  ---------------------------------------------------------------------
@@ -638,19 +702,13 @@ class IndicatorManager(object):
         source             Optional dictionary. Reference to an API or collection of data along 
                            with mapping between schemas
         =================  =====================================================================
-
         :return:
            A bool containing True (for success) or False (for failure).
-
         .. code-block:: python
-
             USAGE EXAMPLE: Add an indicator successfully
-
             indicator1_data = {'id': 'streetCrashes', 'type': 'Data', 'optional':False}
             initiative1.indicators.add(indicator_properties = indicator1_data)
-
             >> True
-
         """
         _stemplates = []
         _id = indicator_properties['id']
@@ -683,22 +741,27 @@ class IndicatorManager(object):
                         _new_initiativedata = json.dumps(self._initiativedata)
                         self._initiativeItem.update(item_properties={'text': _new_initiativedata})
                         _added = True
+                        #Share indicator item with content (open data) group
+                        try:
+                            item = self._gis.content.get(indicator_properties['source']['itemId'])
+                            initiative = self._hub.initiatives.get(self._initiativeItem.id)
+                            content_group = self._gis.groups.get(initiative.opendata_group_id)
+                            item.share(groups=[content_group])
+                        except:
+                            pass
                         return Indicator(self._initiativeItem, indicator_properties)
         if not _added:
             return 'Invalid indicator id for this initiative'
     
     def get(self, indicator_id):
         """ Returns the indicator object for the specified indicator_id.
-
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         indicator_id               Required string. The indicator identifier.
         =======================    =============================================================
-
         :return:
             The indicator object if the indicator is found, None if the indicator is not found.
-
         """
         for indicator in self._indicators:
             if indicator['id']==indicator_id:
@@ -711,7 +774,6 @@ class IndicatorManager(object):
     def search(self, url=None, item_id=None, name=None):
         """ 
         Searches for indicators within an initiative.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -721,7 +783,6 @@ class IndicatorManager(object):
         ---------------     --------------------------------------------------------------------
         name                Optional string. name registered for indicator in `source` dictionary.
         ===============     ====================================================================
-
         :return:
            A list of matching indicators.
         """
@@ -751,14 +812,25 @@ class Event(collections.OrderedDict):
         Constructs an empty Event object
         """
         self._gis = gis
-        self._eventgeometry = eventObject.geometry
-        self._eventdict = eventObject.attributes
+        self._hub = self._gis.hub
+        self._eventdict = eventObject['attributes']
+        try:
+            self._eventdict['geometry'] = eventObject['geometry']
+        except KeyError:
+            self._eventdict['geometry'] = {'x':0.00, 'y':0.00}
         pmap = PropertyMap(self._eventdict)
         self.definition = pmap
             
     def __repr__(self):
-        return '<%s title:"%s" location:%s>' % (type(self).__name__, self.title, self.location)
+        return '<%s title:"%s" venue:%s>' % (type(self).__name__, self.title, self.venue)
     
+    @property 
+    def event_id(self):
+        """
+        Returns the unique identifier of the event
+        """
+        return self._eventdict['OBJECTID']
+
     @property
     def title(self):
         """
@@ -767,11 +839,18 @@ class Event(collections.OrderedDict):
         return self._eventdict['title']
     
     @property
-    def location(self):
+    def venue(self):
         """
         Returns the location of the event
         """
-        return self._eventdict['location'] 
+        return self._eventdict['venue']
+
+    @property
+    def address(self):
+        """
+        Returns the location of the event
+        """
+        return self._eventdict['address1'] 
     
     @property
     def initiativeid(self):
@@ -781,23 +860,16 @@ class Event(collections.OrderedDict):
         return self._eventdict['initiativeId'] 
     
     @property
-    def siteid(self):
+    def site_id(self):
         """
         Returns the site id of the event site
         """
         return self._eventdict['siteId']
     
     @property
-    def organizer_name(self):
-        """
-        Returns the name of the organizer of the event
-        """
-        return self._eventdict['organizerName'] 
-    
-    @property
     def organizers(self):
         """
-        Returns names of all organizers of the event
+        Returns the organizer of the event
         """
         return self._eventdict['organizers']
     
@@ -844,9 +916,9 @@ class Event(collections.OrderedDict):
         return self._eventdict['attendance']
     
     @property
-    def status(self):
+    def access(self):
         """
-        Returns status of the event
+        Returns access permissions of the event
         """
         return self._eventdict['status']
     
@@ -862,7 +934,47 @@ class Event(collections.OrderedDict):
         """
         Returns co-ordinates of the event location
         """
-        return self._eventgeometry
+        return self._eventdict['geometry']
+
+    def delete(self):
+        """
+        Deletes an event
+        :return:
+            A bool containing True (for success) or False (for failure). 
+        .. code-block:: python
+            USAGE EXAMPLE: Delete an event successfully
+            event1 = myhub.events.get(24)
+            event1.delete()
+            >> True
+        """
+        params = {'f': 'json', 'objectIds': self.event_id}
+        delete_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/deleteFeatures', postdata=params)
+        return delete_event['deleteResults'][0]['success']
+        
+    def update(self, event_properties):
+        """
+        Updates properties of an event
+        :return:
+            A bool containing True (for success) or False (for failure). 
+        .. code-block:: python
+            USAGE EXAMPLE: Update an event successfully
+            event1 = myhub.events.get(id)
+            event_properties = {'status': 'planned', description: 'Test'}
+            event1.update(event_properties)
+            >> True
+        """
+        _feature = {}
+
+        #Build event feature 
+        event_properties['OBJECTID'] = self.event_id
+        _feature["attributes"] = event_properties
+        _feature["geometry"] = self.geometry
+        event_data = [_feature]
+
+        #Update event
+        params = {'f': 'json', 'features': event_data}
+        update_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/updateFeatures', postdata=params)
+        return update_event['updateResults'][0]['success']
     
 class EventManager(object):
     """Helper class for managing events within a Hub. This class is not created by users directly. 
@@ -871,26 +983,124 @@ class EventManager(object):
     of a particular Hub. 
     """
     def __init__(self, hub, event=None):
+        self._hub = hub
         self._gis = hub.gis
         if event:
             self._event = event
             
-    def __all_events(self):
+    def _all_events(self):
         """
         Fetches all events for particular hub.
         """
         events = []
-        _events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=5000)[0]
-        _events_layer_url = _events_layer.url + '/0'
-        _events_data = FeatureLayer(_events_layer_url).query().features
+        response = requests.get('https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query?f=json&outFields=*&where=1=1&token='+self._gis._con.token)
+        _events_data = response.json()['features']
+        #_events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=10000)[0]
+        #_events_layer_url = _events_layer.url + '/0'
+        #_events_data = FeatureLayer(_events_layer_url).query().features
         for event in _events_data:
             events.append(Event(self._gis, event))
         return events
-    
-    def search(self, initiative_id=None, title=None, location=None, organizer_name=None):
+
+    def add(self, event_properties):
+        """
+        Adds an event for an initiative.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        event_properties    Required dictionary. See table below for the keys and values.
+        ===============     ====================================================================
+        
+
+        *Key:Value Dictionary Options for Argument event_properties*
+        =================  =====================================================================
+        **Key**            **Value**
+        -----------------  ---------------------------------------------------------------------
+        title              Required string. Name of event.
+        -----------------  ---------------------------------------------------------------------
+        description        Required string. Description of the event.
+        -----------------  ---------------------------------------------------------------------
+        initiaitve_id      Required string. Name label of the item.
+        -----------------  ---------------------------------------------------------------------
+        venue              Required string. Venue name for the event.
+        -----------------  ---------------------------------------------------------------------
+        address1           Required string. Street address for the venue.
+        -----------------  ---------------------------------------------------------------------
+        status             Required string. Access of event. Valid values are private, planned, public.
+        -----------------  ---------------------------------------------------------------------
+        startDate          Required start date and time of event shown in UNIX time.
+        -----------------  ---------------------------------------------------------------------
+        endDate            Required end date and time of event shown in UNIX time.
+        -----------------  ---------------------------------------------------------------------
+        isAllDay           Required boolean. Indicates if the event is a day long event.
+        -----------------  ---------------------------------------------------------------------
+        capacity           Optional integer. The seating capacity of the event venue.
+        -----------------  ---------------------------------------------------------------------
+        address2           Optional string.  Additional information about event venue street address.
+        -----------------  ---------------------------------------------------------------------
+        onlineLocation     Optional string. Web URL or other details for online event.
+        -----------------  ---------------------------------------------------------------------
+        organizers         Optional list of dictionary of keys `name` and `contact` for each organizer's 
+                           name and email. Default values are name and email of event creator.
+        =================  =====================================================================
+
+        :return:
+            Event if successfully added.
+
+        .. code-block:: python
+            USAGE EXAMPLE: Add an event successfully
+            event_properties = {
+                'title':'Test Event',
+                'description': 'Testing with python',
+                'initiativeId': '43f..',
+                'venue': 'Washington Monument',
+                'address1': '2 15th St NW, Washington, District of Columbia, 20024',
+                'status': 'planned',
+                'startDate': 1562803200,
+                'endDate': 1562889600,
+                'isAllDay': 1
+            }
+            new_event = myhub.events.add(event_properties)
+        """
+        _feature = {}
+        #Fetch initiaitve site id
+        _initiative = self._hub.initiatives.get(event_properties['initiativeId'])
+        event_properties['siteId'] = _initiative.site_id
+        #Set organizers if not provided
+        try:
+            event_properties['organizers']
+        except:
+            _organizers = str({'name':self._gis.users.me.fullName, 'contact':self._gis.users.me.email})
+            event_properties['organizers'] = _organizers
+        event_properties['schemaVersion'] = 2
+        event_properties['location'] = ''
+        event_properties['url'] = event_properties['title'].replace(' ', '-').lower()
+        
+        #Generate event id for new event
+        event_id = max([event.event_id for event in self._all_events()]) + 1
+        
+        #Create event group
+        _event_group_dict = {'title': event_properties['title'], 'access': 'public', 'tags': ["Hub Event Group", "Open Data", "hubEvent|"+str(event_id)]}
+        _event_group = self._gis.groups.create_from_dict(_event_group_dict)
+        _event_group.protected = True
+        event_properties['groupId'] = _event_group.id
+        
+        #Build new event feature and create it
+        _feature["attributes"] = event_properties
+        _feature["geometry"] = geocode(event_properties['address1'])[0]['location']
+        event_data = [_feature]
+        params = {'f': 'json', 'features': event_data}
+        add_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/addFeatures', postdata=params)
+        try:
+            add_event['addResults']
+            return self.get(add_event['addResults'][0]['objectId'])
+        except:
+            return add_event
+
+    def search(self, initiative_id=None, title=None, venue=None, organizer_name=None):
         """ 
         Searches for events within a Hub.
-
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -898,26 +1108,38 @@ class EventManager(object):
         ---------------     --------------------------------------------------------------------
         title               Optional string. Title of the event.
         ---------------     --------------------------------------------------------------------
-        location            Optional string. Location where event is held.
+        venue               Optional string. Venue where event is held.
         ---------------     --------------------------------------------------------------------
         organizer_name      Optional string. Name of the organizer of the event.
         ===============     ====================================================================
-
         :return:
            A list of matching indicators.
         """
         events = []
-        events = self.__all_events()
+        events = self._all_events()
         if initiative_id!=None:
             events = [event for event in events if initiative_id==event.initiativeid]
         if title!=None:
             events = [event for event in events if title in event.title]
-        if location!=None:
-            events = [event for event in events if location in event.location]
+        if venue!=None:
+            events = [event for event in events if venue in event.venue]
         if organizer_name!=None:
-            events = [event for event in events if organizer_name==event.organizer_name]
+            events = [event for event in events if organizer_name in event.organizers]
         return events
-    
+
+    def get(self, event_id):
+        """ Get the event for the specified event_id.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        event_id                   Required integer. The event identifier.
+        =======================    =============================================================
+        :return:
+            The event object.
+        """
+        response = requests.get('https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)+'?f=json&token='+self._gis._con.token)
+        return Event(self._gis, response.json()['feature'])
+
     def get_map(self):
         """
         Plot all events for a Hub in an embedded webmap within the notebook.
