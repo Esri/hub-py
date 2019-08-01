@@ -5,7 +5,6 @@ from arcgis._impl.common._mixins import PropertyMap
 from arcgishub.sites import SiteManager
 from datetime import datetime
 import collections
-import requests
 import json
 
 def _lazy_property(fn):
@@ -231,9 +230,13 @@ class Initiative(collections.OrderedDict):
     @property
     def site_url(self):
         """
-        Returns the url of the initiative site
+        Getter/Setter for the url of the initiative site
         """
         return self.item.url
+
+    @site_url.setter
+    def site_url(self, value):
+        self.item.url = value
     
     @property
     def opendata_group_id(self):
@@ -265,6 +268,7 @@ class Initiative(collections.OrderedDict):
         """
         return SiteManager(self._gis, self.item)
     
+    @_lazy_property
     def followers(self, community_gis=None):
         """
         Fetches the list of followers for initiative. 
@@ -435,7 +439,7 @@ class InitiativeManager(object):
         item.update(item_properties={'text': _data})
         return Initiative(self._gis, item)
 
-    def clone(self, initiative, title=None):
+    def clone(self, initiative, origin_hub=None, title=None):
         """
         Clone allows for the creation of a site that is derived from the current site.
 
@@ -443,6 +447,9 @@ class InitiativeManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         initiative          Required Initiative object of site to be cloned.
+        ---------------     --------------------------------------------------------------------
+        origin_hub          Optional Hub object. Required only for cross-org clones where the 
+                            initiative being cloned is not an item with public access.
         ---------------     --------------------------------------------------------------------
         title               Optional String.
         ===============     ====================================================================
@@ -453,8 +460,14 @@ class InitiativeManager(object):
         now = datetime.now(timezone.utc)
         if title is None:
             title = initiative.title + "-copy-%s" % int(now.timestamp() * 1000)
-        site = self.get(initiative.site_id)
+        #fetching initiative site
+        if origin_hub is None:
+            site = self._hub.sites.get(initiative.site_id)
+        else:
+            site = origin_hub.sites.get(initiative.site_id)
+        
         new_initiative = self._hub.initiatives.add(title=title, site=site)
+        new_initiative.update()
         return new_initiative
     
     def get(self, initiative_id):
@@ -596,7 +609,7 @@ class Indicator(collections.OrderedDict):
         Returns the layer name (if configured) of the indicator
         """
         try:
-            return self._indicatordict['source']['url']
+            return self._indicatordict['source']['name']
         except:
             return 'Name not available for this indicator'
         
@@ -848,28 +861,28 @@ class Event(collections.OrderedDict):
     @property
     def address(self):
         """
-        Returns the location of the event
+        Returns the street address for the venue of the event
         """
         return self._eventdict['address1'] 
     
     @property
     def initiativeid(self):
         """
-        Returns the initiative id of the event if it belongs to an Initiative
+        Returns the initiative id of the initiative the event belongs to
         """
         return self._eventdict['initiativeId'] 
     
     @property
     def site_id(self):
         """
-        Returns the site id of the event site
+        Returns the site id of the initiative site
         """
         return self._eventdict['siteId']
     
     @property
     def organizers(self):
         """
-        Returns the organizer of the event
+        Returns the name and email of the event organizers
         """
         return self._eventdict['organizers']
     
@@ -948,7 +961,7 @@ class Event(collections.OrderedDict):
             >> True
         """
         params = {'f': 'json', 'objectIds': self.event_id}
-        delete_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/deleteFeatures', postdata=params)
+        delete_event = self._gis._con.post(path='https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/deleteFeatures', postdata=params)
         return delete_event['deleteResults'][0]['success']
         
     def update(self, event_properties):
@@ -972,8 +985,9 @@ class Event(collections.OrderedDict):
         event_data = [_feature]
 
         #Update event
+        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/updateFeatures'
         params = {'f': 'json', 'features': event_data}
-        update_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/updateFeatures', postdata=params)
+        update_event = self._gis._con.post(path=url, postdata=params)
         return update_event['updateResults'][0]['success']
     
 class EventManager(object):
@@ -993,11 +1007,10 @@ class EventManager(object):
         Fetches all events for particular hub.
         """
         events = []
-        response = requests.get('https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query?f=json&outFields=*&where=1=1&token='+self._gis._con.token)
-        _events_data = response.json()['features']
-        #_events_layer = self._gis.content.search(query="typekeywords:hubEventsLayer", max_items=10000)[0]
-        #_events_layer_url = _events_layer.url + '/0'
-        #_events_data = FeatureLayer(_events_layer_url).query().features
+        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query'
+        params = {'f' :'json', 'outFields': '*', 'where': '1=1'}
+        all_events = gis._con.get(path=url, postdata=params)
+        _events_data = all_events['features']
         for event in _events_data:
             events.append(Event(self._gis, event))
         return events
@@ -1029,13 +1042,13 @@ class EventManager(object):
         -----------------  ---------------------------------------------------------------------
         status             Required string. Access of event. Valid values are private, planned, public.
         -----------------  ---------------------------------------------------------------------
-        startDate          Required start date and time of event shown in UNIX time.
+        startDate          Required start date of the event in milliseconds since UNIX epoch.
         -----------------  ---------------------------------------------------------------------
-        endDate            Required end date and time of event shown in UNIX time.
+        endDate            Required end date of the event in milliseconds since UNIX epoch.
         -----------------  ---------------------------------------------------------------------
         isAllDay           Required boolean. Indicates if the event is a day long event.
         -----------------  ---------------------------------------------------------------------
-        capacity           Optional integer. The seating capacity of the event venue.
+        capacity           Optional integer. The attendance capacity of the event venue.
         -----------------  ---------------------------------------------------------------------
         address2           Optional string.  Additional information about event venue street address.
         -----------------  ---------------------------------------------------------------------
@@ -1090,8 +1103,9 @@ class EventManager(object):
         _feature["attributes"] = event_properties
         _feature["geometry"] = geocode(event_properties['address1'])[0]['location']
         event_data = [_feature]
+        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/addFeatures'
         params = {'f': 'json', 'features': event_data}
-        add_event = self._gis._con.post(path='https://services.arcgis.com/'+self._hub.enterprise_org_id+'/arcgis/rest/services/Hub Events [org]/FeatureServer/0/addFeatures', postdata=params)
+        add_event = self._gis._con.post(path=url, postdata=params)
         try:
             add_event['addResults']
             return self.get(add_event['addResults'][0]['objectId'])
@@ -1137,8 +1151,10 @@ class EventManager(object):
         :return:
             The event object.
         """
-        response = requests.get('https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)+'?f=json&token='+self._gis._con.token)
-        return Event(self._gis, response.json()['feature'])
+        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)
+        params = {'f':'json'}
+        feature = self.gis._con.get(url, postdata = params)
+        return Event(self._gis, feature['feature'])
 
     def get_map(self):
         """
