@@ -80,6 +80,10 @@ class Site(collections.OrderedDict):
         Returns the tags of the site item
         """
         return self.item.tags
+
+    @tags.setter
+    def tags(self, value):
+        self.item.tags = value
     
     @property
     def url(self):
@@ -108,7 +112,8 @@ class Site(collections.OrderedDict):
             self.item.protected = False
             #Delete domain entry
             _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
-            _delete_domain = requests.delete('https://hub.arcgis.com/utilities/domains/'+_site_data['values']['siteId'], headers = _HEADERS)
+            path = 'https://hub.arcgis.com/utilities/domains/'+_site_data['values']['siteId']
+            _delete_domain = requests.delete(path, headers = _HEADERS)
             if _delete_domain.status_code==200:
                 #Delete site item
                 return self.item.delete()
@@ -192,7 +197,8 @@ class SiteManager(object):
                 'orgKey': self._gis.properties['urlKey'], 
                 'orgTitle':self._gis.properties['name']
                 }
-            _new_domain = requests.post('https://hub.arcgis.com/utilities/domains', headers = _HEADERS, data=json.dumps(_body))
+            path = 'https://hub.arcgis.com/utilities/domains'
+            _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
             if _new_domain.status_code==200:
                 _siteId = _new_domain.json()['id']
         else:
@@ -226,7 +232,10 @@ class SiteManager(object):
         site_data['values']['siteId'] = client_key
         site_data['values']['extent'] = self._gis.properties['defaultExtent']
 
-        basemap['url'] = self._gis.properties['defaultBasemap']['baseMapLayers'][0]['url']
+        try:
+            basemap['url'] = self._gis.properties['defaultBasemap']['baseMapLayers'][0]['styleUrl']
+        except KeyError:
+            basemap['url'] = self._gis.properties['defaultBasemap']['baseMapLayers'][0]['url']
         basemap['layerType'] = self._gis.properties['defaultBasemap']['baseMapLayers'][0]['layerType']
         site_data['values']['map']['basemaps']['primary']['baseMapLayers'].append(basemap)
 
@@ -247,8 +256,8 @@ class SiteManager(object):
         ---------------     --------------------------------------------------------------------
         subdomain           Required string.
         ---------------     --------------------------------------------------------------------
-        group_id            Optional string. Represents open data group_id or initiative
-                            collaboration group_id for initiative sites.
+        groups              Optional groups object. Represents open data group or initiative
+                            collaboration groups for initiative sites.
         ===============     ====================================================================
         :return:
            The site if successfully added, None if unsuccessful.
@@ -292,7 +301,7 @@ class SiteManager(object):
             _group = self._gis.groups.get(self._gis.properties.portalProperties.openData.settings.groupId)
             _datafile = 'od-sites-data.json'
             for group in groups:
-                group_ids = group.id
+                group_ids.append(group.id)
         #Initiative Site
         else:
             _item_dict = {
@@ -406,7 +415,7 @@ class SiteManager(object):
                         "title":title, 
                         "properties":{
                                     'hasSeenGlobalNav': True, 
-                                    'createdFrom': site.item.properties['createdFrom'], 
+                                    #'createdFrom': site.item.properties['createdFrom'], 
                                     'schemaVersion': 1, 
                                     },
                         "url":domain
