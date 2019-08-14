@@ -147,12 +147,15 @@ class Initiative(collections.OrderedDict):
     policy- or activity-oriented goals through workflows, tools and team collaboration.
     """
     
-    def __init__(self, gis, initiativeItem):
+    def __init__(self, hub, initiativeItem):
         """
         Constructs an empty Initiative object
         """
         self.item = initiativeItem
-        self._gis = gis
+        self._hub = hub
+        self._gis = self._hub.gis
+        #self._gis = gis
+        #self._hub = gis.hub
         try:
             self._initiativedict = self.item.get_data()
             pmap = PropertyMap(self._initiativedict)
@@ -267,6 +270,13 @@ class Initiative(collections.OrderedDict):
         See :class:`~hub.sites.SiteManager`.
         """
         return SiteManager(self._gis, self.item)
+
+    @_lazy_property
+    def all_events(self):
+        """
+        Fetches all events (past or future) pertaining to an initiative
+        """
+        return self._hub.events.search(initiative_id=self.item.id)
     
     @_lazy_property
     def followers(self, community_gis=None):
@@ -298,7 +308,8 @@ class Initiative(collections.OrderedDict):
 
     def delete(self):
         """
-        Deletes the initiative. If unable to delete, raises a RuntimeException.
+        Deletes the initiative and its site. 
+        If unable to delete, raises a RuntimeException.
         :return:
             A bool containing True (for success) or False (for failure). 
         .. code-block:: python
@@ -424,7 +435,7 @@ class InitiativeManager(object):
         item.share(groups=[collab_group])
 
         #Create initiative site and set initiative properties
-        _initiative = Initiative(self._gis, item)
+        _initiative = Initiative(self._hub, item)
         if site is None:
             site = _initiative.sites.add(title=title, subdomain=title)
         else:
@@ -437,16 +448,16 @@ class InitiativeManager(object):
         _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": [site.itemid]},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
-        return Initiative(self._gis, item)
+        return Initiative(self._hub, item)
 
     def clone(self, initiative, origin_hub=None, title=None):
         """
-        Clone allows for the creation of a site that is derived from the current site.
+        Clone allows for the creation of an initiative that is derived from the current initiative.
 
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        initiative          Required Initiative object of site to be cloned.
+        initiative          Required Initiative object of initiative to be cloned.
         ---------------     --------------------------------------------------------------------
         origin_hub          Optional Hub object. Required only for cross-org clones where the 
                             initiative being cloned is not an item with public access.
@@ -487,7 +498,7 @@ class InitiativeManager(object):
         """
         initiativeItem =    self._gis.content.get(initiative_id)
         if 'hubInitiative' in initiativeItem.typeKeywords:
-            return Initiative(self._gis, initiativeItem)
+            return Initiative(self._hub, initiativeItem)
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
     
@@ -549,7 +560,7 @@ class InitiativeManager(object):
             
         #Return searched initiatives
         for item in items:
-            initiativelist.append(Initiative(self._gis, item))
+            initiativelist.append(Initiative(self._hub, item))
         return initiativelist
         
 class Indicator(collections.OrderedDict):
@@ -866,7 +877,7 @@ class Event(collections.OrderedDict):
         return self._eventdict['address1'] 
     
     @property
-    def initiativeid(self):
+    def initiative_id(self):
         """
         Returns the initiative id of the initiative the event belongs to
         """
@@ -998,7 +1009,7 @@ class EventManager(object):
     """
     def __init__(self, hub, event=None):
         self._hub = hub
-        self._gis = hub.gis
+        self._gis = self._hub.gis
         if event:
             self._event = event
             
@@ -1009,7 +1020,7 @@ class EventManager(object):
         events = []
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query'
         params = {'f' :'json', 'outFields': '*', 'where': '1=1'}
-        all_events = gis._con.get(path=url, postdata=params)
+        all_events = self._gis._con.get(url, params)
         _events_data = all_events['features']
         for event in _events_data:
             events.append(Event(self._gis, event))
@@ -1132,7 +1143,8 @@ class EventManager(object):
         events = []
         events = self._all_events()
         if initiative_id!=None:
-            events = [event for event in events if initiative_id==event.initiativeid]
+            #events = 
+            events = [event for event in events if initiative_id==event.initiative_id]
         if title!=None:
             events = [event for event in events if title in event.title]
         if venue!=None:

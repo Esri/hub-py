@@ -117,6 +117,8 @@ class Site(collections.OrderedDict):
             if _delete_domain.status_code==200:
                 #Delete site item
                 return self.item.delete()
+            else:
+                return _delete_domain.content
 
     def update(self, site_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the site.
