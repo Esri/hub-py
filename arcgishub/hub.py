@@ -4,8 +4,14 @@ from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
 from arcgishub.sites import SiteManager
 from datetime import datetime
+import pandas as pd
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 import collections
 import json
+sns.set(color_codes=True)
 
 def _lazy_property(fn):
     '''Decorator that makes a property lazy-evaluated.
@@ -570,10 +576,11 @@ class Indicator(collections.OrderedDict):
     including features, calculated metrics, or quantified goals. 
     """
     
-    def __init__(self, initiativeItem, indicatorObject):
+    def __init__(self, gis, initiativeItem, indicatorObject):
         """
         Constructs an empty Indicator object
         """
+        self._gis = gis
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicatordict = indicatorObject
@@ -633,6 +640,27 @@ class Indicator(collections.OrderedDict):
             return self._indicatordict['source']['itemId']
         except:
             return 'Item Id not available for this indicator'
+
+    @property
+    def indicator_item(self):
+        """
+        Returns the item of the data layer (if configured) of the indicator
+        """
+        try:
+            return self._gis.content.get(self.itemid)
+        except:
+            return 'Item not configured for this indicator'
+
+    @_lazy_property
+    def data_sdf(self):
+        """
+        Returns the data for the indicator as a Spatial DataFrame.
+        """
+        try:
+            _indicator_flayer = self.indicator_item.layers[0]
+            return pd.DataFrame.spatial.from_layer(indicator_flayer)
+        except:
+            return 'Data not configured for this indicator'
         
     @property
     def mappings(self):
@@ -643,7 +671,7 @@ class Indicator(collections.OrderedDict):
             return self._indicatordict['source']['mappings']
         except:
             return 'Attribute mapping not available for this indicator'
-    
+
     def delete(self):
         """
         Deletes an indicator from the initiative
@@ -660,7 +688,204 @@ class Indicator(collections.OrderedDict):
             self._initiativedata['indicators'] = list(filter(lambda indicator: indicator.get('id')!=_indicator_id, self._initiativedata['indicators']))
             _new_initiativedata = json.dumps(self._initiativedata)
             return self._initiativeItem.update(item_properties={'text': _new_initiativedata})
-     
+
+    def _format_date(date):
+        """
+        Return date in Y-M-D
+        """
+        epoch_time = str(date)
+        return epoch_time
+
+    def _week_day(num):
+        """
+        Return Weekday/Weekend
+        """
+        if num < 4:
+            return 'Weekday'
+        if num >= 4:
+            return 'Weekend'
+
+    def _month(date):
+        """
+        Return month number
+        """
+        return str(date)[5:7]
+
+    def _hour(date):
+        """
+        Return hour number
+        """
+        return str(date)[11:13]
+
+    def _bar_chart(df, attribute):
+        """
+        Generates a bar chart for given attribute if number of categories >= 7.
+        """
+        #Bar chart for 1st category
+        counts1 = df[attribute].value_counts()
+        #Generates bar graph
+        ax = counts1.plot(kind='barh', figsize=(12, 12), legend=True, fontsize=12, alpha=0.5)
+        #X axis text and display style of categories
+        ax.set_xlabel("Count", fontsize=12)
+        #Y axis text
+        ax.set_ylabel(attribute, fontsize=14)
+        #Title
+        ax.set_title("Bar chart for attribute "+attribute, fontsize=20)
+        #Annotations
+        for i in ax.patches:
+            # get_width pulls left or right; get_y pushes up or down
+            ax.text(i.get_width()+.1, i.get_y()+.31, str(round((i.get_width()), 2)), fontsize=10, color='dimgrey')
+        results.append(plt)
+
+    def _pie_chart(df, attribute):
+        """
+        Generates a pie chart for given attribute if number of categories < 7.
+        """
+        explode=None
+        if attribute=='day':
+            explode = (0.05, 0.015)
+        #Data to plot
+        types = list(df[attribute].unique())
+        sizes = df[attribute].value_counts()
+        #Plot
+        plt.figure(figsize=(6,6))
+        plt.pie(sizes, labels=types, explode=explode,
+            autopct='%1.2f%%', shadow=True, startangle=100)
+        plt.axis('equal')
+        results.append(plt)
+
+    def _histogram_chart(df, attribute):
+        """
+        Generates a histogram for numerical attributes and datetime attributes.
+        """
+        plt.figure(figsize=(8,8))
+        bins=None
+        if attribute=='month':
+            bins=range(1,13)
+        n, bins, patches = plt.hist(df[attribute], bins=bins, alpha=0.5)
+        plt.title("Distribution for "+attribute, fontsize=16)
+        plt.xlabel(attribute, fontsize=16)
+        plt.ylabel("Frequency", fontsize=16)
+        results.append(plt)
+
+    def _line_chart(df, attribute):
+        """
+        Generates a line chart for datetime attribute.
+        """
+        frequency = df[attribute].value_counts(normalize=True, sort=False)
+        plt.plot(frequency, color='red')
+        plt.xlim(0, 24)
+        plt.xlabel(attribute)
+        plt.ylabel('Average count')
+        plt.title('Average frequency for every '+attribute)
+        results.append(plt)
+
+
+    def _scatter_chart_boundary():
+        """
+        Generates a scatter chart for variables used to enrich boundaries.
+        """
+        enriched = enrich_layer(boundary_indicator.url, analysis_variables=enrich_variables, output_name='boundaryEnriched_'+initiative.itemid+'_'+boundary_id+str(int(time.time())))
+        #Convert enriched to table
+        enriched_flayer = enriched.layers[0]
+        enriched_df = pd.DataFrame.spatial.from_layer(enriched_flayer)
+        #Scatter plot
+        fig, ax =  plt.subplots(figsize=(8,8))
+        scatter = plt.scatter(enriched_df['TOTPOP_CY'], enriched_df['MEDHINC_CY'], c='blue', alpha=0.6)
+        #X axis text and display style of categories
+        ax.set_xlabel("Population per boundary", fontsize=14)
+        #Y axis text
+        ax.set_ylabel("Median household income per boundary", fontsize=14)
+        #Title
+        ax.set_title("Population v/s Median Household Income", fontsize=20)
+        results.append(plt)
+    
+
+    def explore(self, subclass, display=True):
+        """ Returns exploratory analyses (statistics, charts, map) for the indicator.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        subclass                   Required string. Defines the conceptual classification.
+                                   Valid values are 'measure', 'place', 'boundary'.
+        -----------------------    -------------------------------------------------------------
+        display                    Optional boolean. Indicates if the infographics should be
+                                   displayed inline or returned in a list. Default is True.
+        =======================    =============================================================
+        :return:
+            List of generated analyses if `display=False` else displays results in the notebok.
+        """
+        results = []
+        if subclass.lower() not in ['measure', 'place', 'boundary']:
+            raise Exception("Indicator not of valid subclass")
+
+        #Calculating total number of features
+        indicator_df = self.data_sdf
+        total = 'Total number of '+self.indicatorid+': '+str(indicator_df.shape[0])
+        results.append(total)
+
+        #Getting column names
+        category_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeString']
+        date_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeDate']
+        value_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeInteger']
+      
+        #Call necessary charting methods for numerical variables
+        if value_columnNames:
+            for value in value_columnNames:
+            #Average of value field
+                results.append('Average number of '+value+ ' is: '+str(indicator_df[value].mean()))
+                _histogram_chart(indicator_df, value)
+
+        #Call necessary charting methods for categorical variables
+        if category_columnNames:
+            for category in category_columnNames:
+                if len(indicator_df[category].unique()) < 7:
+                    _pie_chart(indicator_df, category)
+                else:
+                    _bar_chart(indicator_df, category)
+
+        #Call necessary charting methods for datetime variables
+        if date_columnNames:
+            for datetime in date_columnNames:
+                indicator_df['date'] = indicator_df[datetime].apply(format_date)
+                indicator_df['hour'] = indicator_df['date'].apply(hour)
+                #Line chart for hourly distribution
+                _line_chart(indicator_df, 'hour')
+
+                indicator_df['date'] = pd.to_datetime(indicator_df['date']).dt.date
+                indicator_df['day_of_week'] = indicator_df['date'].apply(lambda x: x.weekday()) 
+                indicator_df['day'] = indicator_df['day_of_week'].apply(week_day)
+                #Pie chart for weekday-weekend distribution
+                _pie_chart(indicator_df, 'day')
+
+                indicator_df['month'] = indicator_df['date'].apply(month)
+                indicator_df['month'] = indicator_df['month'].astype(int)
+                #Histogram for monthly distribution
+                _histogram_chart(indicator_df, 'month')
+    
+        if subclass.lower=='boundary':
+            #Scatter plot of variables enriching boundary
+            _scatter_chart_boundary(indicator_df)
+    
+
+        #Map for this indicator
+        indicator_map = self._gis.map()
+        indicator_map.basemap = 'dark-gray'
+        if subclass.lower()=='place':
+            indicator_map.add_layer(indicator_flayer, {'title':'Locations for '+self.indicatorid,'opacity':0.7})
+        elif subclass.lower()=='measure':
+            indicator_map.add_layer(indicator_flayer, {'title':'Desnity based on occurrence','renderer':'HeatmapRenderer','opacity':0.7})
+        results.append(indicator_map)
+        elif subclass.lower()=='boundary':
+            indicator_map.add_layer({"type":"FeatureLayer",
+                "url": enriched.url,
+                "renderer":"ClassedColorRenderer",
+                "field_name":"TOTPOP_CY",
+                "opacity":0.75
+               })
+        return results
+
+    
     def get_data(self):
         """
         Retrieves the data associated with an indicator
@@ -773,7 +998,7 @@ class IndicatorManager(object):
                             item.share(groups=[content_group])
                         except:
                             pass
-                        return Indicator(self._initiativeItem, indicator_properties)
+                        return Indicator(self._gis, self._initiativeItem, indicator_properties)
         if not _added:
             return 'Invalid indicator id for this initiative'
     
@@ -791,7 +1016,7 @@ class IndicatorManager(object):
             if indicator['id']==indicator_id:
                 _indicator = indicator
         try:
-            return Indicator(self._initiativeItem, _indicator)
+            return Indicator(self._gis, self._initiativeItem, _indicator)
         except:
             return None
     
@@ -821,7 +1046,7 @@ class IndicatorManager(object):
         if name!=None:
             _indicators = [indicator for indicator in _indicators if indicator['source']['name']==name]
         for indicator in _indicators:
-            indicatorlist.append(Indicator(self._initiativeItem, indicator))
+            indicatorlist.append(Indicator(self._gis, self._initiativeItem, indicator))
         return indicatorlist
 
 class Event(collections.OrderedDict):
