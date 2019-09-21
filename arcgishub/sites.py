@@ -220,7 +220,10 @@ class SiteManager(object):
             site_data['values'].pop('groups', None)
             site_data['values']['uiVersion'] = "2.3"
             site_data['values']['theme']['globalNav'] = {}
-            site_data['values']['theme']['globalNav'] = self._gis.properties['portalProperties']['sharedTheme']['header']
+            try:
+                site_data['values']['theme']['globalNav'] = self._gis.properties['portalProperties']['sharedTheme']['header']
+            except KeyError:
+                raise KeyError("Hub does not exist or is inaccessible.")
         else:
             site_data['values']['uiVersion'] = "2.2"
 
@@ -230,8 +233,8 @@ class SiteManager(object):
         site_data['values']['subdomain'] = subdomain
         site_data['values']['defaultHostname'] = site.url[8:]
         site_data['values']['updatedBy'] = self._gis.users.me.username
-        site_data['values']['clientId'] = _siteId
-        site_data['values']['siteId'] = client_key
+        site_data['values']['siteId'] = _siteId
+        site_data['values']['clientId'] = client_key
         site_data['values']['extent'] = self._gis.properties['defaultExtent']
 
         try:
