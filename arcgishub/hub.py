@@ -3,9 +3,16 @@ from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
 from arcgishub.sites import SiteManager
+from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
+import pandas as pd
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 import collections
 import json
+sns.set(color_codes=True)
 
 def _lazy_property(fn):
     '''Decorator that makes a property lazy-evaluated.
@@ -228,7 +235,7 @@ class Initiative(collections.OrderedDict):
         """
         Returns the itemid of the initiative site
         """
-        return self.item.properties['siteId']
+        return self._initiativedict['steps'][0]['itemIds'][0]
     
     @property
     def site_url(self):
@@ -570,10 +577,11 @@ class Indicator(collections.OrderedDict):
     including features, calculated metrics, or quantified goals. 
     """
     
-    def __init__(self, initiativeItem, indicatorObject):
+    def __init__(self, gis, initiativeItem, indicatorObject):
         """
         Constructs an empty Indicator object
         """
+        self._gis = gis
         self._initiativeItem = initiativeItem
         self._initiativedata = self._initiativeItem.get_data()
         self._indicatordict = indicatorObject
@@ -633,6 +641,27 @@ class Indicator(collections.OrderedDict):
             return self._indicatordict['source']['itemId']
         except:
             return 'Item Id not available for this indicator'
+
+    @property
+    def indicator_item(self):
+        """
+        Returns the item of the data layer (if configured) of the indicator
+        """
+        try:
+            return self._gis.content.get(self.itemid)
+        except:
+            return 'Item not configured for this indicator'
+
+    @_lazy_property
+    def data_sdf(self):
+        """
+        Returns the data for the indicator as a Spatial DataFrame.
+        """
+        try:
+            _indicator_flayer = self.indicator_item.layers[0]
+            return pd.DataFrame.spatial.from_layer(_indicator_flayer)
+        except:
+            return 'Data not configured for this indicator'
         
     @property
     def mappings(self):
@@ -643,7 +672,7 @@ class Indicator(collections.OrderedDict):
             return self._indicatordict['source']['mappings']
         except:
             return 'Attribute mapping not available for this indicator'
-    
+
     def delete(self):
         """
         Deletes an indicator from the initiative
@@ -660,7 +689,212 @@ class Indicator(collections.OrderedDict):
             self._initiativedata['indicators'] = list(filter(lambda indicator: indicator.get('id')!=_indicator_id, self._initiativedata['indicators']))
             _new_initiativedata = json.dumps(self._initiativedata)
             return self._initiativeItem.update(item_properties={'text': _new_initiativedata})
-     
+
+    def _format_date(self, date):
+        """
+        Return date in Y-M-D
+        """
+        epoch_time = str(date)
+        return epoch_time
+
+    def _week_day(self, num):
+        """
+        Return Weekday/Weekend
+        """
+        if num < 4:
+            return 'Weekday'
+        if num >= 4:
+            return 'Weekend'
+
+    def _month(self, date):
+        """
+        Return month number
+        """
+        return str(date)[5:7]
+
+    def _hour(self, date):
+        """
+        Return hour number
+        """
+        return str(date)[11:13]
+
+    def _bar_chart(self, df, attribute):
+        """
+        Generates a bar chart for given attribute if number of categories >= 7.
+        """
+        #Bar chart for 1st category
+        counts1 = df[attribute].value_counts()
+        #Generates bar graph
+        ax = counts1.plot(kind='barh', figsize=(12, 12), legend=True, fontsize=12, alpha=0.5)
+        #X axis text and display style of categories
+        ax.set_xlabel("Count", fontsize=12)
+        #Y axis text
+        ax.set_ylabel(attribute, fontsize=14)
+        #Title
+        ax.set_title("Bar chart for attribute "+attribute, fontsize=20)
+        #Annotations
+        for i in ax.patches:
+            # get_width pulls left or right; get_y pushes up or down
+            ax.text(i.get_width()+.1, i.get_y()+.31, str(round((i.get_width()), 2)), fontsize=10, color='dimgrey')
+        #results.append(plt)
+        plt.show()
+
+    def _pie_chart(self, df, attribute):
+        """
+        Generates a pie chart for given attribute if number of categories < 7.
+        """
+        
+        #Data to plot
+        types = list(df[attribute].unique())
+        types = [category for category in types if category]
+        sizes = df[attribute].value_counts()
+        #Plot
+        plt.figure(figsize=(6,6))
+        plt.title('Pie chart for '+attribute)
+        plt.pie(sizes, labels=types,
+            autopct='%1.2f%%', shadow=True, startangle=100)
+        plt.axis('equal')
+        #results.append(plt)
+        plt.show()
+
+    def _histogram_chart(self, df, attribute):
+        """
+        Generates a histogram for numerical attributes and datetime attributes.
+        """
+        plt.figure(figsize=(8,8))
+        bins=None
+        if attribute=='month':
+            bins=range(1,13)
+        n, bins, patches = plt.hist(df[attribute], bins=bins, alpha=0.5)
+        plt.title("Distribution for "+attribute, fontsize=16)
+        plt.xlabel(attribute, fontsize=16)
+        plt.ylabel("Frequency", fontsize=16)
+        #results.append(plt)
+        plt.show()
+
+    def _line_chart(self, df, attribute):
+        """
+        Generates a line chart for datetime attribute.
+        """
+        hours = df[attribute].unique().tolist()
+        hours.sort()
+        frequency = df[attribute].value_counts(normalize=True, sort=False)
+        plt.plot(hours, frequency, color='red')
+        plt.xlim(0, 24)
+        plt.xlabel(attribute)
+        plt.ylabel('Average count')
+        plt.title('Average frequency for every '+attribute)
+        #results.append(plt)
+        plt.show()
+
+    def _scatter_chart_boundary(self):
+        """
+        Generates a scatter chart for variables used to enrich boundaries.
+        """
+        enrich_variables = ['TOTPOP_CY', 'MEDHINC_CY']
+        enriched = enrich_layer(self.url, analysis_variables=enrich_variables, output_name='boundaryEnriched_'+self.itemid+str(int(time.time())))
+        #Convert enriched to table
+        enriched_flayer = enriched.layers[0]
+        enriched_df = pd.DataFrame.spatial.from_layer(enriched_flayer)
+        #Scatter plot
+        fig, ax =  plt.subplots(figsize=(8,8))
+        scatter = plt.scatter(enriched_df['TOTPOP_CY'], enriched_df['MEDHINC_CY'], c='blue', alpha=0.6)
+        #X axis text and display style of categories
+        ax.set_xlabel("Population per boundary", fontsize=14)
+        #Y axis text
+        ax.set_ylabel("Median household income per boundary", fontsize=14)
+        #Title
+        ax.set_title("Population v/s Median Household Income", fontsize=20)
+        #results.append(plt)
+        plt.show()
+        return enriched
+
+    def explore(self, subclass, display=True):
+        """ Returns exploratory analyses (statistics, charts, map) for the indicator.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        subclass                   Required string. Defines the conceptual classification.
+                                   Valid values are 'measure', 'place', 'boundary'.
+        -----------------------    -------------------------------------------------------------
+        display                    Optional boolean. Indicates if the infographics should be
+                                   displayed inline or returned in a list. Default is True.
+        =======================    =============================================================
+        :return:
+            List of generated analyses if `display=False` else displays results in the notebok.
+        """
+        results = []
+        if subclass.lower() not in ['measure', 'place', 'boundary']:
+            raise Exception("Indicator not of valid subclass")
+
+        #Calculating total number of features
+        indicator_df = self.data_sdf
+        total = 'Total number of '+self.indicatorid+': '+str(indicator_df.shape[0])
+        results.append(total)
+
+        #Getting column names
+        category_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeString']
+        date_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeDate']
+        value_columnNames = [field['name'] for field in self.mappings if field['type']=='esriFieldTypeInteger']
+      
+        #Call necessary charting methods for numerical variables
+        if value_columnNames:
+            for value in value_columnNames:
+            #Average of value field
+                results.append('Average number of '+value+ ' is: '+str(indicator_df[value].mean()))
+                self._histogram_chart(indicator_df, value)
+
+        #Call necessary charting methods for categorical variables
+        if category_columnNames:
+            for category in category_columnNames:
+                if len(indicator_df[category].unique()) < 7:
+                    self._pie_chart(indicator_df, category)
+                elif len(indicator_df[category].unique()) < 50:
+                    self._bar_chart(indicator_df, category)
+
+        #Call necessary charting methods for datetime variables
+        if date_columnNames:
+            for datetime in date_columnNames:
+                indicator_df['date'] = indicator_df[datetime].apply(self._format_date)
+                indicator_df['hour'] = indicator_df['date'].apply(self._hour)
+                #Line chart for hourly distribution
+                self._line_chart(indicator_df, 'hour')
+
+                indicator_df['date'] = pd.to_datetime(indicator_df['date']).dt.date
+                indicator_df['day_of_week'] = indicator_df['date'].apply(lambda x: x.weekday()) 
+                indicator_df['day'] = indicator_df['day_of_week'].apply(self._week_day)
+                #Pie chart for weekday-weekend distribution
+                self._pie_chart(indicator_df, 'day')
+
+                indicator_df['month'] = indicator_df['date'].apply(self._month)
+                try:
+                    indicator_df['month'] = indicator_df['month'].astype(int)
+                except:
+                    pass
+                #Histogram for monthly distribution
+                self._histogram_chart(indicator_df, 'month')
+    
+        #Map for this indicator
+        indicator_map = self._gis.map()
+        indicator_map.basemap = 'dark-gray'
+        if subclass.lower()=='place':
+            indicator_map.add_layer(self.indicator_item.layers[0], {'title':'Locations for '+self.indicatorid,'opacity':0.7})
+        elif subclass.lower()=='measure':
+            indicator_map.add_layer(self.indicator_item.layers[0], {'title':'Desnity based on occurrence','renderer':'HeatmapRenderer','opacity':0.7})
+        elif subclass.lower()=='boundary':
+            #Scatter plot of variables enriching boundary
+            enriched = self._scatter_chart_boundary()
+            #Map of the enriched layer
+            indicator_map.add_layer({"type":"FeatureLayer",
+                "url": enriched.url,
+                "renderer":"ClassedColorRenderer",
+                "field_name":"TOTPOP_CY",
+                "opacity":0.75
+               })
+        #results.append(indicator_map)
+        return indicator_map
+
+    
     def get_data(self):
         """
         Retrieves the data associated with an indicator
@@ -773,7 +1007,7 @@ class IndicatorManager(object):
                             item.share(groups=[content_group])
                         except:
                             pass
-                        return Indicator(self._initiativeItem, indicator_properties)
+                        return Indicator(self._gis, self._initiativeItem, indicator_properties)
         if not _added:
             return 'Invalid indicator id for this initiative'
     
@@ -791,7 +1025,7 @@ class IndicatorManager(object):
             if indicator['id']==indicator_id:
                 _indicator = indicator
         try:
-            return Indicator(self._initiativeItem, _indicator)
+            return Indicator(self._gis, self._initiativeItem, _indicator)
         except:
             return None
     
@@ -821,7 +1055,7 @@ class IndicatorManager(object):
         if name!=None:
             _indicators = [indicator for indicator in _indicators if indicator['source']['name']==name]
         for indicator in _indicators:
-            indicatorlist.append(Indicator(self._initiativeItem, indicator))
+            indicatorlist.append(Indicator(self._gis, self._initiativeItem, indicator))
         return indicatorlist
 
 class Event(collections.OrderedDict):
@@ -945,7 +1179,14 @@ class Event(collections.OrderedDict):
         Returns access permissions of the event
         """
         return self._eventdict['status']
-    
+
+    @property 
+    def group_id(self):
+        """
+        Returns groupId for the event
+        """
+        return self._eventdict['groupId']
+
     @property
     def is_cancelled(self):
         """
@@ -971,6 +1212,9 @@ class Event(collections.OrderedDict):
             event1.delete()
             >> True
         """
+        _group = self._gis.groups.get(self.group_id)
+        _group.protected = False
+        _group.delete()
         params = {'f': 'json', 'objectIds': self.event_id}
         delete_event = self._gis._con.post(path='https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/deleteFeatures', postdata=params)
         return delete_event['deleteResults'][0]['success']
@@ -991,7 +1235,9 @@ class Event(collections.OrderedDict):
 
         #Build event feature 
         event_properties['OBJECTID'] = self.event_id
-        _feature["attributes"] = event_properties
+        _feature["attributes"] = self._eventdict
+        for key,value in event_properties.items():
+            _feature["attributes"][key] = value
         _feature["geometry"] = self.geometry
         event_data = [_feature]
 
@@ -1165,7 +1411,7 @@ class EventManager(object):
         """
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)
         params = {'f':'json'}
-        feature = self.gis._con.get(url, postdata = params)
+        feature = self._gis._con.get(url, params)
         return Event(self._gis, feature['feature'])
 
     def get_map(self):
