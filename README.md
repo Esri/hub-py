@@ -28,16 +28,21 @@ Once installed, test it by launching an instance of Jupyter Notebook and importi
 
 Test if the version has been upgraded by following with the command
 
-``` arcgishub.__version__ ```
+``` 
+import arcgishub
+arcgishub.__version__ 
+```
 
 ### Getting Started
 
 The first step to interacting with `arcgishub` is creating an instance of a Hub and exploring all that it contains.
-For instance:
+For example:
 
 ```  
-myHub = hub.Hub("https://cityxcommunity.maps.arcgis.com/home/index.html") #or the url of your org
-myHub.initiatives.search()
+from arcgishub import hub
+myHub = hub.Hub("https://cityx.maps.arcgis.com") # or the url of your ArcGIS Online organization
+initiatives = myHub.initiatives.search()
+print(initiatives)
 ```
 
 fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki) for more information and API reference about the functionality supported.
