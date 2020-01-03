@@ -56,37 +56,55 @@ class Hub(object):
             self._gis_id = self.gis.properties.id
         except AttributeError:
             self._gis_id = None
+
+    @property
+    def _hub_enabled(self):
+        """
+        Returns True if Hub is enabled on this org
+        """
+        try:
+            self.gis.properties.subscriptionInfo.hubSettings.enabled
+            return True
+        except:
+            return False
             
     @property
     def enterprise_org_id(self):
         """
         Returns the AGOL org id of the Enterprise Organization associated with this Hub.
         """
-        try:
-            self.gis.properties.portalProperties.hub
+
+        if self._hub_enabled:
             try:
-                return self.gis.properties.portalProperties.hub.settings.enterpriseOrg.orgId
-            except AttributeError: 
-                return  self._gis_id
-        except:
-            print("Hub does not exist or is inaccessible.")
-            raise
-                        
+                _e_org_id = self.gis.properties.portalProperties.hub.settings.enterpriseOrg.orgId
+                return _e_org_id
+            except AttributeError:
+                try:
+                    if self.gis.properties.subscriptionInfo.companionOrganizations.type=='Enterprise':
+                        return 'Enterprise org id is not available'
+                except:
+                    return self._gis_id
+        else:
+            raise Exception("Hub does not exist or is inaccessible.")
+
     @property
     def community_org_id(self):
         """
         Returns the AGOL org id of the Community Organization associated with this Hub.
         """
-        try:
-            self.gis.properties.portalProperties.hub
+        if self._hub_enabled:
             try:
-                return self.gis.properties.portalProperties.hub.settings.communityOrg.orgId
+                _c_org_id = self.gis.properties.portalProperties.hub.settings.communityOrg.orgId
+                return _c_org_id
             except AttributeError:
-                return  self._gis_id
-        except:
-            print("Hub does not exist or is inaccessible.")
-            raise  
-  
+                try:
+                    if self.gis.properties.subscriptionInfo.companionOrganizations.type=='Community':
+                        return 'Community org id is not available'
+                except:
+                    return self._gis_id
+        else:
+            raise Exception("Hub does not exist or is inaccessible.")
+        
     @property
     def enterprise_org_url(self):
         """
@@ -146,7 +164,7 @@ class Hub(object):
         """
         The resource manager for Hub sites. See :class:`~hub.sites.SiteManager`.
         """
-        return SiteManager(self.gis)
+        return SiteManager(self)
 
 class Initiative(collections.OrderedDict):
     """
@@ -236,7 +254,7 @@ class Initiative(collections.OrderedDict):
         Returns the itemid of the initiative site
         """
         return self._initiativedict['steps'][0]['itemIds'][0]
-    
+
     @property
     def site_url(self):
         """
@@ -249,18 +267,25 @@ class Initiative(collections.OrderedDict):
         self.item.url = value
     
     @property
-    def opendata_group_id(self):
+    def content_group_id(self):
         """
-        Returns the groupId for the content (open data) group
+        Returns the groupId for the content group
         """
-        return self.item.properties['openDataGroupId']
+        return self.item.properties['contentGroupId']
     
     @property
     def collab_group_id(self):
         """
-        Returns the groupId for the content (open data) group
+        Returns the groupId for the collaboration group
         """
-        return self.item.properties['groupId']
+        return self.item.properties['collaborationGroupId']
+
+    @property
+    def followers_group_id(self):
+        """
+        Returns the groupId for the followers group
+        """
+        return self.item.properties['followersGroupId']
     
     @_lazy_property
     def indicators(self):
@@ -276,7 +301,7 @@ class Initiative(collections.OrderedDict):
         The resource manager for an Initiative's sites. 
         See :class:`~hub.sites.SiteManager`.
         """
-        return SiteManager(self._gis, self.item)
+        return SiteManager(self._hub, self.item)
 
     @_lazy_property
     def all_events(self):
@@ -327,21 +352,26 @@ class Initiative(collections.OrderedDict):
         """
         if self.item is not None:
             #Fetch Initiative Collaboration group
-            _collab_groupId = self.item.properties['groupId']
+            _collab_groupId = self.item.properties['collaborationGroupId']
             _collab_group = self._gis.groups.get(_collab_groupId)
-            #Fetch Open Data Group
-            _od_groupId = self.item.properties['openDataGroupId']
-            _od_group = self._gis.groups.get(_od_groupId)
+            #Fetch Content Group
+            _content_groupId = self.item.properties['contentGroupId']
+            _content_group = self._gis.groups.get(_content_groupId)
+            #Fetch Followers Group
+            _followers_groupId = self.item.properties['followersGroupId']
+            _followers_group = self._gis.groups.get(_followers_groupId)
             #Fetch initiative site
             _site_id = self.definition['steps'][0]['itemIds'][0]
             _site = self.sites.get(_site_id)
             #Disable delete protection on groups and site
             _collab_group.protected = False
-            _od_group.protected = False
+            _content_group.protected = False
+            _followers_group.protected = False
             _site.protected = False
             #Delete groups, site and initiative
             _collab_group.delete()
-            _od_group.delete()
+            _content_group.delete()
+            _followers_group.delete()
             _site.delete()
             return self.item.delete()
     
@@ -418,24 +448,29 @@ class InitiativeManager(object):
             description = 'Create your own initiative to organize people around a shared goal.'
         _item_dict = {"type":"Hub Initiative", "snippet":title + " Custom initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
         
-        #Defining open data and collaboration groups
-        _od_group_title = title + ' Initiative Content Group'
-        _od_group_dict = {"title": _od_group_title, "tags": ["Hub Initiative Group", "Open Data"], "access":"public", "isOpenData": True}
-        _collab_group_title = title + ' Initiative Collaboration Group'
-        _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Initiative Group", "initiativeCollaborationGroup"], "access":"org"}
+        #Defining content, collaboration and followers groups
+        _content_group_title = title + ' Content'
+        _content_group_dict = {"title": _content_group_title, "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
+        _collab_group_title = title + ' Core Team'
+        _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
+        _followers_group_title = title + ' Followers'
+        _followers_group_dict = {"title": _followers_group_title, "tags": ["Hub Initiative Group", " Hub Initiative Followers Group", "Hub Initiative Group"], "access":"public"}
         
         #Create groups
-        od_group =  self._gis.groups.create_from_dict(_od_group_dict)
+        content_group =  self._gis.groups.create_from_dict(_content_group_dict)
         collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+        followers_group = self._gis.groups.create_from_dict(_followers_group_dict)
         
         #Protect groups from accidental deletion
-        od_group.protected = True
+        content_group.protected = True
         collab_group.protected = True
+        followers_group.protected = True
         
         #Adding it to _item_dict
-        if od_group is not None and collab_group is not None:
-            _item_dict['properties']['groupId'] = collab_group.id
-            _item_dict['properties']['openDataGroupId'] = od_group.id
+        if content_group is not None and collab_group is not None and followers_group is not None:
+            _item_dict['properties']['collaborationGroupId'] = collab_group.id
+            _item_dict['properties']['contentGroupId'] = content_group.id
+            _item_dict['properties']['followersGroupId'] = followers_group.id
         
         #Create initiative and share it with collaboration group
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
@@ -444,7 +479,7 @@ class InitiativeManager(object):
         #Create initiative site and set initiative properties
         _initiative = Initiative(self._hub, item)
         if site is None:
-            site = _initiative.sites.add(title=title, subdomain=title)
+            site = _initiative.sites.add(title=title)
         else:
             site = self._hub.sites.clone(site, title)
         item.update(item_properties={'url': site.url})
@@ -452,7 +487,7 @@ class InitiativeManager(object):
         item.properties['site_id'] = site.itemid
         
         #update initiative data
-        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": [site.itemid]},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"openDataGroupId": od_group.id,"followerGroups": [],"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
+        _item_data = {"assets": [{"id": "bannerImage","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/detail-image.jpg","properties": {"type": "resource","fileName": "detail-image.jpg","mimeType": "image/jepg"},"license": {"type": "none"},"display": {"position": {"x": "center","y": "center"}}},{"id": "iconDark","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-dark.png","properties": {"type": "resource","fileName": "icon-dark.png","mimeType": "image/png"},"license": {"type": "none"}},{"id": "iconLight","url": self._hub.enterprise_org_url+"/sharing/rest/content/items/"+item.id+"/resources/icon-light.png","properties": {"type": "resource","fileName": "icon-light.png","mimeType": "image/png"},"license": {"type": "none"}}],"steps": [{"id": "informTools","title": "Inform the Public","description": "Share data about your initiative with the public so people can easily find, download and use your data in different formats.","templateIds": [],"itemIds": [site.itemid]},{"id": "listenTools","title": "Listen to the Public","description": "Create ways to gather citizen feedback to help inform your city officials.","templateIds": [],"itemIds": []},{"id": "monitorTools","title": "Monitor Progress","description": "Establish performance measures that incorporate the publics perspective.","templateIds": [],"itemIds": []}],"indicators": [],"values": {"collaborationGroupId": collab_group.id,"contentGroupId": content_group.id,"followersGroupId": followers_group.id,"bannerImage": {"source": "bannerImage","display": {"position": {"x": "center","y": "center"}}}}}
         _data = json.dumps(_item_data)
         item.update(item_properties={'text': _data})
         return Initiative(self._hub, item)
@@ -1003,7 +1038,7 @@ class IndicatorManager(object):
                         try:
                             item = self._gis.content.get(indicator_properties['source']['itemId'])
                             initiative = self._hub.initiatives.get(self._initiativeItem.id)
-                            content_group = self._gis.groups.get(initiative.opendata_group_id)
+                            content_group = self._gis.groups.get(initiative.content_group_id)
                             item.share(groups=[content_group])
                         except:
                             pass
