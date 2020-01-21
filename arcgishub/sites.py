@@ -117,6 +117,36 @@ class Site(collections.OrderedDict):
         self.definition['values']['layout']['sections'][section]['rows'].append(new_row)
         self.item.update(item_properties={'text': self.definition})
 
+    def clone(self, title=None, destination_hub=None):
+        """
+        Clone allows for the creation of a site that is derived from the current site.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        site                Required Site object of site to be cloned.
+        ---------------     --------------------------------------------------------------------
+        title               Optional String.
+        ===============     ====================================================================
+        :return:
+           Site.
+        """
+        if title is None:
+            title = self.title + "-copy-%s" % int(now.timestamp() * 1000)
+        if destination_hub is None:
+            destination_hub = self._hub
+        if self._hub._hub_enabled:
+            raise Exception("Please clone the initiative object based on your hub.")
+        else:
+            if destination_hub._hub_enabled:
+                #new initiative
+                new_initiative = destination_hub.initiatives.add(title=title, site=self)
+                return new_initiative
+            else:
+                #new site
+                print('Create new site')
+            
+
     def add_catalog_group(self, group_id):
         """
         ===============     ====================================================================
@@ -261,6 +291,8 @@ class SiteManager(object):
             _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
             if _new_domain.status_code==200:
                 _siteId = _new_domain.json()['id']
+            else:
+                return _new_domain
         else:
             #Check for length of domain
             if len(subdomain) > 63:
@@ -376,6 +408,7 @@ class SiteManager(object):
                         "tags": tags,
                         "title":title,
                         "description":description, 
+                        "culture": self._gis.properties.user.culture,
                         "properties":{
                                     'hasSeenGlobalNav': True, 
                                     'createdFrom': 'defaultInitiativeSiteTemplate', 
@@ -388,9 +421,11 @@ class SiteManager(object):
                                     }, 
                         "url":domain
                         }
-            collab_group = self._gis.groups.get(self._initiative.properties['collaborationGroupId'])
             _datafile = 'init-sites-data.json'
             content_group_id = self._initiative.properties['contentGroupId']
+            collab_group_id = self._initiative.properties['collaborationGroupId']
+            collab_group = self._gis.groups.get(collab_group_id)
+            
         
         #Non Hub Sites
         else:
@@ -438,7 +473,7 @@ class SiteManager(object):
             _site_data = json.load(f)
        
         #Register site and update its data
-        _data = self._create_and_register_site(site, subdomain, _site_data, content_group_id, collab_group.id)
+        _data = self._create_and_register_site(site, subdomain, _site_data, content_group_id, collab_group_id)
         _data = json.dumps(_data)
         site.update(item_properties={'text': _data, 'url': domain})
         return Site(self._gis, site)
@@ -459,13 +494,14 @@ class SiteManager(object):
         """
         from datetime import timezone
         now = datetime.now(timezone.utc)
+        #Checking if item of correct type has been passed 
+        if 'hubSite' not in site.item.typeKeywords:
+            raise Exception("Incorrect item type. Site item needed for cloning.")
+        #New title
         if title is None:
             title = site.title + "-copy-%s" % int(now.timestamp() * 1000)
-        if self._hub._hub_enabled:
-            try:
-                site.item.properties.parentInitiativeId
-                raise Exception("Please clone the initiative object of this site for your organization.")
-            except AttributeError:
+        if self._initiative is None:
+            if self._hub._hub_enabled:
                 self._hub.initiatives.add(title, site=site)
         subdomain = title.replace(' ', '-').lower()
         if self._gis._portal.is_arcgisonline:
@@ -485,29 +521,43 @@ class SiteManager(object):
                         "title":title, 
                         "properties":{
                                     'hasSeenGlobalNav': True, 
-                                    #'createdFrom': site.item.properties['createdFrom'], 
                                     'schemaVersion': 1, 
                                     },
                         "url":domain
         }
-
-        #Defining content, collaboration groups
-        _content_group_dict = {"title": subdomain + ' Content', "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
-        _collab_group_dict = {"title": subdomain + ' Core Team', "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
-        #Create groups
-        content_group =  self._gis.groups.create_from_dict(_content_group_dict)
-        content_group_id = content_group.id
-        collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
-        collab_group_id = collab_group.id
-        #Protect groups from accidental deletion
-        content_group.protected = True
-        collab_group.protected = True
+        #Updating properties, groups for initiative sites
+        if self._initiative is not None:
+            _site_properties["properties"] = {
+                                            'hasSeenGlobalNav': True, 
+                                            'createdFrom': 'defaultInitiativeSiteTemplate', 
+                                            'schemaVersion': 1.2, 
+                                            'collaborationGroupId': self._initiative.properties['collaborationGroupId'], 
+                                            'contentGroupId': self._initiative.properties['contentGroupId'], 
+                                            'followersGroupId': self._initiative.properties['followersGroupId'], 
+                                            'parentInitiativeId': self._initiative.id, 
+                                            'children': []
+                                        }
+            content_group_id = self._initiative.properties['contentGroupId']
+            collab_group_id = self._initiative.properties['collaborationGroupId']
+            collab_group = self._gis.groups.get(collab_group_id)
+        else:
+            #Defining content, collaboration groups
+            _content_group_dict = {"title": subdomain + ' Content', "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
+            _collab_group_dict = {"title": subdomain + ' Core Team', "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
+            #Create groups
+            content_group =  self._gis.groups.create_from_dict(_content_group_dict)
+            content_group_id = content_group.id
+            collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+            collab_group_id = collab_group.id
+            #Protect groups from accidental deletion
+            content_group.protected = True
+            collab_group.protected = True
             
         #Create site item, share with group
         new_site = self._gis.content.add(_site_properties, owner=self._gis.users.me.username)
 
         #Share with necessary group
-        new_site.share(groups=[content_group])
+        new_site.share(groups=[collab_group])
 
         #Register new site and update its data
         _data = self._create_and_register_site(new_site, subdomain, site.definition, content_group_id, collab_group_id)

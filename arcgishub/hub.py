@@ -338,6 +338,39 @@ class Initiative(collections.OrderedDict):
             followers.append(_temp)
         return followers
 
+    def clone(self, title=None, destination_hub=None):
+        """
+        Clone allows for the creation of an initiative that is derived from the current initiative.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        title               Optional string.
+        ---------------     --------------------------------------------------------------------
+        destination_hub     Optional Hub object. Required only for cross-org clones where the 
+                            initiative being cloned is not an item with public access.
+        ===============     ====================================================================
+        :return:
+           Initiative.
+        """
+        if title is None:
+            title = self.title + "-copy-%s" % int(now.timestamp() * 1000)
+        if destination_hub is None:
+            destination_hub = self._hub
+        if self._hub._hub_enabled:
+            site = self._hub.sites.get(self.site_id)
+            if destination_hub._hub_enabled:
+                #new initiative
+                new_initiative = destination_hub.initiatives.add(title=title, site=site)
+                return new_initiative
+            else:
+                #new site
+                print('Create new site')
+        else:
+            raise Exception("Please clone the site object as per limitations of your origin_hub.")
+
+
+
     def delete(self):
         """
         Deletes the initiative and its site. 
@@ -361,8 +394,11 @@ class Initiative(collections.OrderedDict):
             _followers_groupId = self.item.properties['followersGroupId']
             _followers_group = self._gis.groups.get(_followers_groupId)
             #Fetch initiative site
-            _site_id = self.definition['steps'][0]['itemIds'][0]
-            _site = self.sites.get(_site_id)
+            try:
+                _site_id = self.definition['steps'][0]['itemIds'][0]
+                _site = self.sites.get(_site_id)
+            except:
+                pass
             #Disable delete protection on groups and site
             _collab_group.protected = False
             _content_group.protected = False
@@ -406,6 +442,21 @@ class Initiative(collections.OrderedDict):
             _initiative_data = self.definition
             for key, value in initiative_properties.items():
                 _initiative_data[key] = value
+                if key=='title':
+                    title = value
+                    #Fetch Initiative Collaboration group
+                    _collab_groupId = self.item.properties['collaborationGroupId']
+                    _collab_group = self._gis.groups.get(_collab_groupId)
+                    #Fetch Content Group
+                    _content_groupId = self.item.properties['contentGroupId']
+                    _content_group = self._gis.groups.get(_content_groupId)
+                    #Fetch Followers Group
+                    _followers_groupId = self.item.properties['followersGroupId']
+                    _followers_group = self._gis.groups.get(_followers_groupId)
+                    #Update title for all groups
+                    _collab_group.update(title=title+' Core Team')
+                    _content_group.update(title=title+' Content')
+                    _followers_group.update(title=title+' Followers')
             return self.item.update(_initiative_data, data, thumbnail, metadata)
     
 class InitiativeManager(object):
@@ -481,8 +532,8 @@ class InitiativeManager(object):
         if site is None:
             site = _initiative.sites.add(title=title)
         else:
-            site = self._hub.sites.clone(site, title)
-        item.update(item_properties={'url': site.url})
+            site = _initiative.sites.clone(site, title)
+        item.update(item_properties={'url': site.url, 'culture': self._gis.properties.user.culture})
         _initiative.site_url = site.item.url
         item.properties['site_id'] = site.itemid
         
@@ -511,18 +562,30 @@ class InitiativeManager(object):
         """
         from datetime import timezone
         now = datetime.now(timezone.utc)
+        #Checking if item of correct type has been passed 
+        if 'hubInitiative' not in initiative.item.typeKeywords:
+            raise Exception("Incorrect item type. Initiative item needed for cloning.")
+        #New title
         if title is None:
             title = initiative.title + "-copy-%s" % int(now.timestamp() * 1000)
-        #fetching initiative site
+        #If cloning within same org
         if origin_hub is None:
-            site = self._hub.sites.get(initiative.site_id)
-        else:
-            site = origin_hub.sites.get(initiative.site_id)
-        
-        new_initiative = self._hub.initiatives.add(title=title, site=site)
-        new_initiative.update()
-        return new_initiative
-    
+            origin_hub = self._hub
+        #Fetch site (checking if origin_hub is correct or if initiative is public)
+            try:
+                site = origin_hub.sites.get(initiative.site_id)
+            except:
+                raise Exception("Please provide origin_hub of the initiative object, if the initiative is not publicly shared")
+            #Create new initiative if destination hub is premium
+            if self._hub._hub_enabled:
+                #new initiative
+                new_initiative = self._hub.initiatives.add(title=title, site=site)
+                return new_initiative
+            else:
+                #Create new site if destination hub is basic/enterprise
+                new_site = self._hub.sites.clone(site, title=title)
+                return new_site
+
     def get(self, initiative_id):
         """ 
         Returns the initiative object for the specified initiative_id.
