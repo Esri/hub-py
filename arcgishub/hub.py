@@ -338,39 +338,6 @@ class Initiative(collections.OrderedDict):
             followers.append(_temp)
         return followers
 
-    def clone(self, title=None, destination_hub=None):
-        """
-        Clone allows for the creation of an initiative that is derived from the current initiative.
-
-        ===============     ====================================================================
-        **Argument**        **Description**
-        ---------------     --------------------------------------------------------------------
-        title               Optional string.
-        ---------------     --------------------------------------------------------------------
-        destination_hub     Optional Hub object. Required only for cross-org clones where the 
-                            initiative being cloned is not an item with public access.
-        ===============     ====================================================================
-        :return:
-           Initiative.
-        """
-        if title is None:
-            title = self.title + "-copy-%s" % int(now.timestamp() * 1000)
-        if destination_hub is None:
-            destination_hub = self._hub
-        if self._hub._hub_enabled:
-            site = self._hub.sites.get(self.site_id)
-            if destination_hub._hub_enabled:
-                #new initiative
-                new_initiative = destination_hub.initiatives.add(title=title, site=site)
-                return new_initiative
-            else:
-                #new site
-                print('Create new site')
-        else:
-            raise Exception("Please clone the site object as per limitations of your origin_hub.")
-
-
-
     def delete(self):
         """
         Deletes the initiative and its site. 
@@ -572,19 +539,19 @@ class InitiativeManager(object):
         if origin_hub is None:
             origin_hub = self._hub
         #Fetch site (checking if origin_hub is correct or if initiative is public)
-            try:
-                site = origin_hub.sites.get(initiative.site_id)
-            except:
-                raise Exception("Please provide origin_hub of the initiative object, if the initiative is not publicly shared")
-            #Create new initiative if destination hub is premium
-            if self._hub._hub_enabled:
-                #new initiative
-                new_initiative = self._hub.initiatives.add(title=title, site=site)
-                return new_initiative
-            else:
-                #Create new site if destination hub is basic/enterprise
-                new_site = self._hub.sites.clone(site, title=title)
-                return new_site
+        try:
+            site = origin_hub.sites.get(initiative.site_id)
+        except:
+            raise Exception("Please provide origin_hub of the initiative object, if the initiative is not publicly shared")
+        #Create new initiative if destination hub is premium
+        if self._hub._hub_enabled:
+            #new initiative
+            new_initiative = self._hub.initiatives.add(title=title, site=site)
+            return new_initiative
+        else:
+            #Create new site if destination hub is basic/enterprise
+            new_site = self._hub.sites.clone(site, title=title)
+            return new_site
 
     def get(self, initiative_id):
         """ 

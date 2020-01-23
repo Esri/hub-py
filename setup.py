@@ -11,7 +11,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     
-    version='2.0.0',
+    version='2.1.0',
     description='ArcGIS Hub Python API',
     long_description='Python API to automate your Hub processes',
     #url='http://pypi.python.org/pypi/TowelStuff/',
@@ -28,7 +28,7 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 3',
+        'Development Status :: 4',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers, Hub Customers',
@@ -38,7 +38,7 @@ setup(
 
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
 
     # What does your project relate to?
