@@ -117,36 +117,6 @@ class Site(collections.OrderedDict):
         self.definition['values']['layout']['sections'][section]['rows'].append(new_row)
         self.item.update(item_properties={'text': self.definition})
 
-    def clone(self, title=None, destination_hub=None):
-        """
-        Clone allows for the creation of a site that is derived from the current site.
-
-        ===============     ====================================================================
-        **Argument**        **Description**
-        ---------------     --------------------------------------------------------------------
-        site                Required Site object of site to be cloned.
-        ---------------     --------------------------------------------------------------------
-        title               Optional String.
-        ===============     ====================================================================
-        :return:
-           Site.
-        """
-        if title is None:
-            title = self.title + "-copy-%s" % int(now.timestamp() * 1000)
-        if destination_hub is None:
-            destination_hub = self._hub
-        if self._hub._hub_enabled:
-            raise Exception("Please clone the initiative object based on your hub.")
-        else:
-            if destination_hub._hub_enabled:
-                #new initiative
-                new_initiative = destination_hub.initiatives.add(title=title, site=self)
-                return new_initiative
-            else:
-                #new site
-                print('Create new site')
-            
-
     def add_catalog_group(self, group_id):
         """
         ===============     ====================================================================
@@ -187,6 +157,19 @@ class Site(collections.OrderedDict):
         """
         #Delete enterprise site
         if not self._gis._portal.is_arcgisonline:
+             #Fetch Enterprise Site Collaboration group
+            _collab_groupId = self.item.properties['collaborationGroupId']
+            _collab_group = self._gis.groups.get(_collab_groupId)
+            #Fetch Content Group
+            _content_groupId = self.item.properties['contentGroupId']
+            _content_group = self._gis.groups.get(_content_groupId)
+            #Disable delete protection on groups and site
+            _collab_group.protected = False
+            _content_group.protected = False
+            self.item.protect(enable=False)
+            #Delete groups, site and initiative
+            _collab_group.delete()
+            _content_group.delete()
             return self.item.delete()
         #Deleting hub sites
         if self.item is not None:
@@ -388,7 +371,7 @@ class SiteManager(object):
         else:
             item_type = "Site Application"
             typekeywords = "Hub, hubSite, hubSolution, hubsubdomain|" +subdomain+", JavaScript, Map, Mapping Site, Online Map, OpenData, Ready To Use, selfConfigured, Web Map"
-            tags = ["Hub Site"]
+            tags = ["Enterprise Site"]
             description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"apps/sites/admin/"
 
             #Domain manipulation
@@ -436,6 +419,7 @@ class SiteManager(object):
             content_group =  self._gis.groups.create_from_dict(_content_group_dict)
             content_group_id = content_group.id
             collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+            collab_group_id = collab_group.id
             #Protect groups from accidental deletion
             content_group.protected = True
             collab_group.protected = True
@@ -502,7 +486,7 @@ class SiteManager(object):
             title = site.title + "-copy-%s" % int(now.timestamp() * 1000)
         if self._initiative is None:
             if self._hub._hub_enabled:
-                self._hub.initiatives.add(title, site=site)
+                return self._hub.initiatives.add(title, site=site)
         subdomain = title.replace(' ', '-').lower()
         if self._gis._portal.is_arcgisonline:
             item_type = "Hub Site Application"
