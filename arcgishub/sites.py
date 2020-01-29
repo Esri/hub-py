@@ -99,6 +99,14 @@ class Site(collections.OrderedDict):
         """
         return self.definition['catalog']['groups']
 
+    @_lazy_property
+    def pages(self):
+        """
+        The resource manager for an Initiative's indicators. 
+        See :class:`~hub.sites.PageManager`.
+        """
+        return PageManager(self._gis, self)
+
     def add_card(self, section, card_data):
         """
         Add a card to the existing site.
@@ -233,7 +241,7 @@ class SiteManager(object):
     """
     
     def __init__(self, hub, initiative=None):
-        self._hub= hub
+        self._hub = hub
         self._gis = self._hub.gis
         self._initiative = initiative
 
@@ -385,6 +393,9 @@ class SiteManager(object):
         #setting item properties based on type of site
         #Hub Premium Site
         if self._hub._hub_enabled:
+            content_group_id = self._initiative.content_group_id
+            collab_group_id = self._initiative.collab_group_id
+            collab_group = self._gis.groups.get(collab_group_id)
             _item_dict = {
                         "type":item_type, 
                         "typekeywords":typekeywords,
@@ -396,18 +407,15 @@ class SiteManager(object):
                                     'hasSeenGlobalNav': True, 
                                     'createdFrom': 'defaultInitiativeSiteTemplate', 
                                     'schemaVersion': 1.2, 
-                                    'collaborationGroupId': self._initiative.properties['collaborationGroupId'], 
-                                    'contentGroupId': self._initiative.properties['contentGroupId'], 
-                                    'followersGroupId': self._initiative.properties['followersGroupId'], 
-                                    'parentInitiativeId': self._initiative.id, 
+                                    'collaborationGroupId': collab_group_id, 
+                                    'contentGroupId': content_group_id, 
+                                    'followersGroupId': self._initiative.followers_group_id, 
+                                    'parentInitiativeId': self._initiative.itemid, 
                                     'children': []
                                     }, 
                         "url":domain
                         }
             _datafile = 'init-sites-data.json'
-            content_group_id = self._initiative.properties['contentGroupId']
-            collab_group_id = self._initiative.properties['collaborationGroupId']
-            collab_group = self._gis.groups.get(collab_group_id)
             
         
         #Non Hub Sites
@@ -511,19 +519,19 @@ class SiteManager(object):
         }
         #Updating properties, groups for initiative sites
         if self._initiative is not None:
+            content_group_id = self._initiative.content_group_id
+            collab_group_id = self._initiative.collab_group_id
+            collab_group = self._gis.groups.get(collab_group_id)
             _site_properties["properties"] = {
                                             'hasSeenGlobalNav': True, 
                                             'createdFrom': 'defaultInitiativeSiteTemplate', 
                                             'schemaVersion': 1.2, 
-                                            'collaborationGroupId': self._initiative.properties['collaborationGroupId'], 
-                                            'contentGroupId': self._initiative.properties['contentGroupId'], 
-                                            'followersGroupId': self._initiative.properties['followersGroupId'], 
-                                            'parentInitiativeId': self._initiative.id, 
+                                            'collaborationGroupId': collab_group_id, 
+                                            'contentGroupId': content_group_id, 
+                                            'followersGroupId': self._initiative.followers_group_id, 
+                                            'parentInitiativeId': self._initiative.itemid, 
                                             'children': []
                                         }
-            content_group_id = self._initiative.properties['contentGroupId']
-            collab_group_id = self._initiative.properties['collaborationGroupId']
-            collab_group = self._gis.groups.get(collab_group_id)
         else:
             #Defining content, collaboration groups
             _content_group_dict = {"title": subdomain + ' Content', "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
@@ -593,6 +601,10 @@ class SiteManager(object):
 
         sitelist = []
         
+        if self._initiative is not None:
+            _site_id = self._initiative.site_id
+            return self.get(_site_id)
+
         #Build search query
         query = 'typekeywords:hubSite'
         if title!=None:
@@ -613,3 +625,109 @@ class SiteManager(object):
         for item in items:
             sitelist.append(Site(self._gis, item))
         return sitelist
+
+class Page(collections.OrderedDict):
+    """
+    Represents a page belonging to a site in Hub. A Page is a layout of 
+    content that can be rendered within the context of a Site
+    """
+    
+    def __init__(self, gis, pageItem):
+        """
+        Constructs an empty Page object
+        """
+        self.item = pageItem
+        self._gis = gis
+        try:
+            self._pagedict = self.item.get_data()
+            pmap = PropertyMap(self._pagedict)
+            self.definition = pmap
+        except:
+            self.definition = None
+            
+    def __repr__(self):
+        return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.item.title, self.item.owner)
+    
+class PageManager(object):
+    """
+    Helper class for managing pages within a Hub. This class is not created by users directly. 
+    An instance of this class, called 'pages', is available as a property of the Site object. Users
+    call methods on this 'pages' object to manipulate (add, get, search, etc) pages for a site.
+    """
+    
+    def __init__(self, gis, site=None):
+        #self._hub = hub
+        #self._gis = self._hub.gis
+        self._gis = gis
+        self._site = site
+
+    def get(self, page_id):
+        """ Returns the page object for the specified page_id.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        page_id                    Required string. The page itemid.
+        =======================    =============================================================
+        :return:
+            The page object if the item is found, None if the item is not found.
+        .. code-block:: python
+            USAGE EXAMPLE: Fetch an initiative successfully
+            page1 = myHub.pages.get('itemId12345')
+            page1.item
+        """
+        pageItem = self._gis.content.get(page_id)
+        if 'hubPage' in pageItem.typeKeywords:
+            return Page(self._gis, pageItem)
+        else:
+            raise TypeError("Item is not a valid site or is inaccessible.")
+
+    def search(self, title=None, owner=None, created=None, modified=None, tags=None):
+        """ 
+        Searches for pages.
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        title               Optional string. Return pages with provided string in title.
+        ---------------     --------------------------------------------------------------------
+        owner               Optional string. Return pages owned by a username.
+        ---------------     --------------------------------------------------------------------
+        created             Optional string. Date the page was created.
+                            Shown in milliseconds since UNIX epoch.
+        ---------------     --------------------------------------------------------------------
+        modified            Optional string. Date the page was last modified.
+                            Shown in milliseconds since UNIX epoch
+        ---------------     --------------------------------------------------------------------
+        tags                Optional string. User-defined tags that describe the page.
+        ===============     ====================================================================
+        :return:
+           A list of matching sites.
+        """
+
+        pagelist = []
+
+        if self._site is not None:
+            pages = self._site.definition['values']['pages']
+            items = [self._gis.content.get(page['id']) for page in pages]
+        else:
+            #Build search query
+            query = 'typekeywords:hubSite'
+            if title!=None:
+                query += ' AND title:'+title
+            if owner!=None:
+                query += ' AND owner:'+owner
+            if created!=None:
+                query += ' AND created:'+created
+            if modified!=None:
+                query += ' AND modified:'+modified
+            if tags!=None:
+                query += ' AND tags:'+tags
+        
+            #Search
+            items = self._gis.content.search(query=query, max_items=5000)
+        
+        #Return searched sites
+        for item in items:
+            pagelist.append(Page(self._gis, item))
+        return pagelist
+        
+
