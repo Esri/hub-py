@@ -97,14 +97,20 @@ class Site(collections.OrderedDict):
         """
         Returns the groupId for the content group
         """
-        return self.item.properties['contentGroupId']
+        try:
+            return self.item.properties['contentGroupId']
+        except:
+            return self._initiative.content_group_id
     
     @property
     def collab_group_id(self):
         """
         Returns the groupId for the collaboration group
         """
-        return self.item.properties['collaborationGroupId']
+        try:
+            return self.item.properties['collaborationGroupId']
+        except:
+            return self._initiative.collab_group_id
 
     @property
     def catalog_groups(self):
@@ -121,7 +127,7 @@ class Site(collections.OrderedDict):
         """
         return PageManager(self._gis, self)
 
-    @_lazy_property
+    @property
     def all_pages(self):
         """
         Return pages for the particular site
@@ -719,6 +725,64 @@ class Page(collections.OrderedDict):
         """
         return self.title.replace(' ', '-').lower()
 
+    def update(self, page_properties=None, slug=None, data=None, thumbnail=None, metadata=None):
+        """ Updates the page.
+        .. note::
+            For page_properties, pass in arguments for only the properties you want to be updated.
+            All other properties will be untouched.  For example, if you want to update only the
+            page's description, then only provide the description argument in page_properties.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        page_properties           Required dictionary. See URL below for the keys and values.
+        ---------------------     --------------------------------------------------------------------
+        data                      Optional string. Either a path or URL to the data.
+        ---------------------     --------------------------------------------------------------------
+        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
+        ---------------------     --------------------------------------------------------------------
+        metadata                  Optional string. Either a path or URL to the metadata.
+        =====================     ====================================================================
+        To find the list of applicable options for argument page_properties - 
+        https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
+        :return:
+           A boolean indicating success (True) or failure (False).
+        .. code-block:: python
+            USAGE EXAMPLE: Update a site successfully
+            page1 = mySite.pages.get('itemId12345')
+            page1.update(page_properties={'description':'Description for page.'})
+            >> True
+        """
+        if page_properties:
+            _page_data = self.definition
+            for key, value in page_properties.items():
+                _page_data[key] = value
+            return self.item.update(_page_data, data, thumbnail, metadata)
+ 
+    def delete(self):
+        """
+        Deletes the site. If unable to delete, raises a RuntimeException.
+        :return:
+            A bool containing True (for success) or False (for failure). 
+        .. code-block:: python
+            USAGE EXAMPLE: Delete a site successfully
+            site1 = myHub.sites.get('itemId12345')
+            site1.delete()
+            >> True
+        """
+        #Unlink sites
+        linked_sites = self.definition['values']['sites']
+        for item in linked_sites:
+            site_item = self._gis.content.get(item['id'])
+            site = Site(self._gis, site_item)
+            site.definition['values']['pages'] = [p for p in site.definition['values']['pages'] if p['id']!=self.itemid]
+            site.item.update(item_properties={'text': site.definition})
+        #Remove delete protection on page
+        self.item.protect(enable=False)
+        #Delete page item
+        self.item.delete()
+
+
+
 class PageManager(object):
     """
     Helper class for managing pages within a Hub. This class is not created by users directly. 
@@ -760,10 +824,9 @@ class PageManager(object):
         #If called from a specified site
         if self._site is not None:
             site = self._site
-        #Fetch site groups
+        #Fetch site group
         collab_group = self._gis.groups.get(site.collab_group_id)
-        content_group = self._gis.groups.get(site.content_group_id)
-
+    
         #For pages in ArcGIS Online
         if self._gis._portal.is_arcgisonline:
             #Set item details
@@ -775,8 +838,8 @@ class PageManager(object):
         else:
             item_type = "Site Page"
             typekeywords = "Hub, hubPage, JavaScript, Map, Mapping Site, Online Map, OpenData, selfConfigured, Web Map"
-            description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"apps/sites/#/home/overview/edit/"
-            image_card_url = self._gis.url +'apps/sites/images/placeholders/page-editor-card-image-placeholder.jpg'
+            description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"/apps/sites/#/home/overview/edit/"
+            image_card_url = self._gis.url +'/apps/sites/images/placeholders/page-editor-card-image-placeholder.jpg'
         #Create page item
         _item_dict = {
                     "title":title,
@@ -788,7 +851,7 @@ class PageManager(object):
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         
         #share page with content and core team groups
-        item.share(groups=[collab_group, content_group])
+        item.share(groups=[collab_group])
 
         #protect page from accidental deletion
         item.protect(enable=True)
@@ -799,10 +862,6 @@ class PageManager(object):
             _page_data = json.load(f)
 
         #Updating page data
-        _sites = {}
-        _sites['id'] = site.itemid
-        _sites['title'] = site.title
-        _page_data['values']['sites'].append(_sites)
         _page_data['values']['layout']['sections'][1]['rows'][0]['cards'][0]['component']['settings']['src'] = image_card_url
         _page_data['values']['updatedBy'] = self._gis.users.me.username
         _data = json.dumps(_page_data)
@@ -813,6 +872,42 @@ class PageManager(object):
         if status:
             return page
 
+    def clone(self, page, site=None):
+        """
+        Clone allows for the creation of a page that is derived from the current page.
+
+        ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        site                Required Page object of page to be cloned.
+        ---------------     --------------------------------------------------------------------
+        title               Optional String.
+        ===============     ====================================================================
+        :return:
+           Page.
+        """
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        #New title
+        title = page.title + "-copy-%s" % int(now.timestamp() * 1000)
+        #Checking if item of correct type has been passed 
+        if 'hubPage' not in page.item.typeKeywords:
+            raise Exception("Incorrect item type. Page item needed for cloning.")
+        #If site object is not provided
+        if site is None:
+            if self._site is None:
+                raise Exception('Site object needed for unlinking page')
+        #If called from a specified site
+        if self._site is not None:
+            site = self._site
+        #Create new page within site
+        _cloned_page = site.pages.add(title)
+        #Copy the page layout
+        _cloned_page.definition['values']['layout'] = page.definition['values']['layout']
+        #_data = json.dumps(_cloned_page.definition)
+        _cloned_page.item.update(item_properties={'text': _cloned_page.definition})
+        return Page(self._gis, _cloned_page.item)
+        
     def get(self, page_id):
         """ Returns the page object for the specified page_id.
         =======================    =============================================================
@@ -854,7 +949,11 @@ class PageManager(object):
             myHub.pages.link(page_id='itemId12345', site=mySite)
             >> True
         """
-        _new = {}
+        _new_page = {}
+        _new_site = {}
+        #Checking if item of correct type has been passed 
+        if 'hubPage' not in page.item.typeKeywords:
+            raise Exception("Incorrect item type. Page item needed for cloning.")
         #If site object is not provided
         if site is None:
             if self._site is None:
@@ -864,11 +963,17 @@ class PageManager(object):
             site = self._site
         #Create new page dictionary
         _site_data = site.definition    
-        _new['id'] = page.itemid
-        _new['title'] = page.title
-        _new['slug'] = page.slug
-        _site_data['values']['pages'].append(_new)
-        #Update site data with new page
+        _new_page['id'] = page.itemid
+        _new_page['title'] = page.title
+        _new_page['slug'] = page.slug
+        _site_data['values']['pages'].append(_new_page)
+        #Create new site dictionary
+        _page_data = page.definition    
+        _new_site['id'] = site.itemid
+        _new_site['title'] = site.title
+        _page_data['values']['sites'].append(_new_site)
+        #Update page and site data with new linking
+        page.item.update(item_properties={'text': _page_data})
         return site.item.update(item_properties={'text': _site_data})
 
     def unlink(self, page, site=None):
@@ -896,13 +1001,24 @@ class PageManager(object):
         if site is None:
             if self._site is None:
                 raise Exception('Site object needed for unlinking page')
+        #Checking if item of correct type has been passed 
+        if 'hubPage' not in page.item.typeKeywords:
+            raise Exception("Incorrect item type. Page item needed for cloning.")
         #If called from a specified site
         if self._site is not None:
             site = self._site
-        #Extract pages for the site
-        _site_data = site.definition    
+        #Update site and pages with the unlinking
+        _site_data = site.definition  
+        _page_data = page.definition  
         _site_data['values']['pages'] = [p for p in _site_data['values']['pages'] if p['id']!=page.itemid]
-        #Update site data with new page
+        _page_data['values']['sites'] = [s for s in _page_data['values']['sites'] if s['id']!=site.itemid]
+        #Delete page if it has no other site linkage
+        if len(_page_data['values']['sites'])==0:
+            page.delete()
+        #Update page data to reflect unlinking
+        else:
+            page.item.update(item_properties={'text': _page_data})
+        #Update site data to reflect unlinking
         return site.item.update(item_properties={'text': _site_data})
 
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
