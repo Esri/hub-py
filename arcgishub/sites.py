@@ -93,6 +93,20 @@ class Site(collections.OrderedDict):
         return self.item.url
 
     @property
+    def content_group_id(self):
+        """
+        Returns the groupId for the content group
+        """
+        return self.item.properties['contentGroupId']
+    
+    @property
+    def collab_group_id(self):
+        """
+        Returns the groupId for the collaboration group
+        """
+        return self.item.properties['collaborationGroupId']
+
+    @property
     def catalog_groups(self):
         """
         Return Site catalog groups
@@ -106,6 +120,13 @@ class Site(collections.OrderedDict):
         See :class:`~hub.sites.PageManager`.
         """
         return PageManager(self._gis, self)
+
+    @_lazy_property
+    def all_pages(self):
+        """
+        Return pages for the particular site
+        """
+        return self.pages.search()
 
     def add_card(self, section, card_data):
         """
@@ -567,7 +588,7 @@ class SiteManager(object):
         :return:
             The site object if the item is found, None if the item is not found.
         .. code-block:: python
-            USAGE EXAMPLE: Fetch an initiative successfully
+            USAGE EXAMPLE: Fetch a site successfully
             site1 = myHub.sites.get('itemId12345')
             site1.item
         """
@@ -648,6 +669,56 @@ class Page(collections.OrderedDict):
     def __repr__(self):
         return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.item.title, self.item.owner)
     
+    @property
+    def itemid(self):
+        """
+        Returns the item id of the page item
+        """
+        return self.item.id
+    
+    @property
+    def title(self):
+        """
+        Returns the title of the page item
+        """
+        return self.item.title
+    
+    @property
+    def description(self):
+        """
+        Getter/Setter for the page description
+        """
+        return self.item.description
+    
+    @description.setter
+    def description(self, value):
+        self.item.description = value
+        
+    @property
+    def owner(self):
+        """
+        Returns the owner of the page item
+        """
+        return self.item.owner
+
+    @property
+    def tags(self):
+        """
+        Returns the tags of the page item
+        """
+        return self.item.tags
+
+    @tags.setter
+    def tags(self, value):
+        self.item.tags = value
+    
+    @property
+    def slug(self):
+        """
+        Returns the slug
+        """
+        return self.title.replace(' ', '-').lower()
+
 class PageManager(object):
     """
     Helper class for managing pages within a Hub. This class is not created by users directly. 
@@ -661,6 +732,87 @@ class PageManager(object):
         self._gis = gis
         self._site = site
 
+    def add(self, title, site=None):
+        """ Returns the pages linked to the specific site.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        title                      Required string. The title of the new page.
+        -----------------------    -------------------------------------------------------------
+        site                       Optional string. The site object to add the page to.
+        =======================    =============================================================
+        :return:
+           The page if successfully added, None if unsuccessful.
+        .. code-block:: python
+            USAGE EXAMPLE: Add a page to a site successfully 
+            page1 = mySite.pages.add(title='My first page')
+            page1.item
+
+        .. code-block:: python
+            USAGE EXAMPLE: Add a page successfully 
+            page2 = myHub.pages.add(title='My second page', site=mySite)
+            page2.item
+        """
+        #If site object is not provided
+        if site is None:
+            if self._site is None:
+                raise Exception('Site object needed for adding page')
+        #If called from a specified site
+        if self._site is not None:
+            site = self._site
+        #Fetch site groups
+        collab_group = self._gis.groups.get(site.collab_group_id)
+        content_group = self._gis.groups.get(site.content_group_id)
+
+        #For pages in ArcGIS Online
+        if self._gis._portal.is_arcgisonline:
+            #Set item details
+            item_type = "Hub Page"
+            typekeywords = "Hub, hubPage, JavaScript, Map, Mapping Site, Online Map, OpenData, selfConfigured, Web Map"
+            description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Hub application. To make changes to this site, please visit https://hub.arcgis.com/overview/edit"
+            image_card_url = 'https://cloud.githubusercontent.com/assets/7389593/20107607/1d2c3844-a5a7-11e6-9ec0-9e389033ccd8.jpg'
+        #For Enterprise Sites
+        else:
+            item_type = "Site Page"
+            typekeywords = "Hub, hubPage, JavaScript, Map, Mapping Site, Online Map, OpenData, selfConfigured, Web Map"
+            description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"apps/sites/#/home/overview/edit/"
+            image_card_url = self._gis.url +'apps/sites/images/placeholders/page-editor-card-image-placeholder.jpg'
+        #Create page item
+        _item_dict = {
+                    "title":title,
+                    "type": item_type,
+                    "typeKeywords": typekeywords,
+                    "description": description,
+                    "culture": self._gis.properties.user.culture
+                    }
+        item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
+        
+        #share page with content and core team groups
+        item.share(groups=[collab_group, content_group])
+
+        #protect page from accidental deletion
+        item.protect(enable=True)
+
+        #Fetching page data
+        data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '_store/pages-data.json'))
+        with open(data_path) as f:
+            _page_data = json.load(f)
+
+        #Updating page data
+        _sites = {}
+        _sites['id'] = site.itemid
+        _sites['title'] = site.title
+        _page_data['values']['sites'].append(_sites)
+        _page_data['values']['layout']['sections'][1]['rows'][0]['cards'][0]['component']['settings']['src'] = image_card_url
+        _page_data['values']['updatedBy'] = self._gis.users.me.username
+        _data = json.dumps(_page_data)
+        item.update(item_properties={'text': _data})
+        page = Page(self._gis, item)
+        #Link page to site
+        status = site.pages.link(page)
+        if status:
+            return page
+
     def get(self, page_id):
         """ Returns the page object for the specified page_id.
         =======================    =============================================================
@@ -671,7 +823,7 @@ class PageManager(object):
         :return:
             The page object if the item is found, None if the item is not found.
         .. code-block:: python
-            USAGE EXAMPLE: Fetch an initiative successfully
+            USAGE EXAMPLE: Fetch a page successfully
             page1 = myHub.pages.get('itemId12345')
             page1.item
         """
@@ -679,7 +831,79 @@ class PageManager(object):
         if 'hubPage' in pageItem.typeKeywords:
             return Page(self._gis, pageItem)
         else:
-            raise TypeError("Item is not a valid site or is inaccessible.")
+            raise TypeError("Item is not a valid page or is inaccessible.")
+
+    def link(self, page, site=None):
+        """ Links the page to the specific site.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        page                       Required string. The page object to link.
+        -----------------------    -------------------------------------------------------------
+        site                       Optional string. The site object to link page to.
+        =======================    =============================================================
+        :return:
+            A bool containing True (for success) or False (for failure).
+        .. code-block:: python
+            USAGE EXAMPLE: Link a page successfully for specific site
+            mySite.pages.link(page_id='itemId12345')
+            >> True
+            
+        .. code-block:: python
+            USAGE EXAMPLE: Link a page successfully for site object passed as param
+            myHub.pages.link(page_id='itemId12345', site=mySite)
+            >> True
+        """
+        _new = {}
+        #If site object is not provided
+        if site is None:
+            if self._site is None:
+                raise Exception('Site object needed for linking page')
+        #If called from a specified site
+        if self._site is not None:
+            site = self._site
+        #Create new page dictionary
+        _site_data = site.definition    
+        _new['id'] = page.itemid
+        _new['title'] = page.title
+        _new['slug'] = page.slug
+        _site_data['values']['pages'].append(_new)
+        #Update site data with new page
+        return site.item.update(item_properties={'text': _site_data})
+
+    def unlink(self, page, site=None):
+        """ Unlinks the page from the specific site.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        page                       Required string. The page object to unlink.
+        -----------------------    -------------------------------------------------------------
+        site                       Optional string. The site object to unlink page from.
+        =======================    =============================================================
+        :return:
+            A bool containing True (for success) or False (for failure).
+        .. code-block:: python
+            USAGE EXAMPLE: Unlink a page successfully from specific site
+            mySite.pages.unlink(page_id='itemId12345')
+            >> True
+            
+        .. code-block:: python
+            USAGE EXAMPLE: Unlink a page successfully from site object passed as param
+            myHub.pages.unlink(page_id='itemId12345', site=mySite)
+            >> True
+        """
+        #If site object is not provided
+        if site is None:
+            if self._site is None:
+                raise Exception('Site object needed for unlinking page')
+        #If called from a specified site
+        if self._site is not None:
+            site = self._site
+        #Extract pages for the site
+        _site_data = site.definition    
+        _site_data['values']['pages'] = [p for p in _site_data['values']['pages'] if p['id']!=page.itemid]
+        #Update site data with new page
+        return site.item.update(item_properties={'text': _site_data})
 
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
@@ -700,7 +924,7 @@ class PageManager(object):
         tags                Optional string. User-defined tags that describe the page.
         ===============     ====================================================================
         :return:
-           A list of matching sites.
+           A list of matching pages.
         """
 
         pagelist = []
@@ -710,7 +934,7 @@ class PageManager(object):
             items = [self._gis.content.get(page['id']) for page in pages]
         else:
             #Build search query
-            query = 'typekeywords:hubSite'
+            query = 'typekeywords:hubPage'
             if title!=None:
                 query += ' AND title:'+title
             if owner!=None:
@@ -725,7 +949,7 @@ class PageManager(object):
             #Search
             items = self._gis.content.search(query=query, max_items=5000)
         
-        #Return searched sites
+        #Return searched pages
         for item in items:
             pagelist.append(Page(self._gis, item))
         return pagelist

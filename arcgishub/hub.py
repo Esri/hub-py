@@ -171,7 +171,7 @@ class Hub(object):
         """
         The resource manager for Hub pages. See :class:`~hub.sites.PageManager`.
         """
-        return PageManager(self._gis)
+        return PageManager(self.gis)
 
 class Initiative(collections.OrderedDict):
     """
