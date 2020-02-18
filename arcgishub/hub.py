@@ -2,7 +2,7 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
-from arcgishub.sites import SiteManager
+from arcgishub.sites import SiteManager, PageManager
 from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
 import pandas as pd
@@ -166,6 +166,13 @@ class Hub(object):
         """
         return SiteManager(self)
 
+    @_lazy_property
+    def pages(self):
+        """
+        The resource manager for Hub pages. See :class:`~hub.sites.PageManager`.
+        """
+        return PageManager(self.gis)
+
 class Initiative(collections.OrderedDict):
     """
     Represents an initiative within a Hub. An Initiative supports 
@@ -301,7 +308,7 @@ class Initiative(collections.OrderedDict):
         The resource manager for an Initiative's sites. 
         See :class:`~hub.sites.SiteManager`.
         """
-        return SiteManager(self._hub, self.item)
+        return SiteManager(self._hub, self)
 
     @_lazy_property
     def all_events(self):
@@ -352,30 +359,26 @@ class Initiative(collections.OrderedDict):
         """
         if self.item is not None:
             #Fetch Initiative Collaboration group
-            _collab_groupId = self.item.properties['collaborationGroupId']
-            _collab_group = self._gis.groups.get(_collab_groupId)
+            _collab_group = self._gis.groups.get(self.collab_group_id)
             #Fetch Content Group
-            _content_groupId = self.item.properties['contentGroupId']
-            _content_group = self._gis.groups.get(_content_groupId)
+            _content_group = self._gis.groups.get(self.content_group_id)
             #Fetch Followers Group
-            _followers_groupId = self.item.properties['followersGroupId']
-            _followers_group = self._gis.groups.get(_followers_groupId)
+            _followers_group = self._gis.groups.get(self.followers_group_id)
             #Fetch initiative site
             try:
-                _site_id = self.definition['steps'][0]['itemIds'][0]
-                _site = self.sites.get(_site_id)
+                _site = self.sites.get(self.site_id)
+                _site.protected = False
+                _site.delete()
             except:
                 pass
             #Disable delete protection on groups and site
             _collab_group.protected = False
             _content_group.protected = False
             _followers_group.protected = False
-            _site.protected = False
             #Delete groups, site and initiative
             _collab_group.delete()
             _content_group.delete()
             _followers_group.delete()
-            _site.delete()
             return self.item.delete()
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
@@ -412,14 +415,11 @@ class Initiative(collections.OrderedDict):
                 if key=='title':
                     title = value
                     #Fetch Initiative Collaboration group
-                    _collab_groupId = self.item.properties['collaborationGroupId']
-                    _collab_group = self._gis.groups.get(_collab_groupId)
+                    _collab_group = self._gis.groups.get(self.collab_group_id)
                     #Fetch Content Group
-                    _content_groupId = self.item.properties['contentGroupId']
-                    _content_group = self._gis.groups.get(_content_groupId)
+                    _content_group = self._gis.groups.get(self.content_group_id)
                     #Fetch Followers Group
-                    _followers_groupId = self.item.properties['followersGroupId']
-                    _followers_group = self._gis.groups.get(_followers_groupId)
+                    _followers_group = self._gis.groups.get(self.followers_group_id)
                     #Update title for all groups
                     _collab_group.update(title=title+' Core Team')
                     _content_group.update(title=title+' Content')
