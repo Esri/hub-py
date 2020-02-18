@@ -127,13 +127,6 @@ class Site(collections.OrderedDict):
         """
         return PageManager(self._gis, self)
 
-    @property
-    def all_pages(self):
-        """
-        Return pages for the particular site
-        """
-        return self.pages.search()
-
     def add_card(self, section, card_data):
         """
         Add a card to the existing site.
@@ -928,7 +921,7 @@ class PageManager(object):
         else:
             raise TypeError("Item is not a valid page or is inaccessible.")
 
-    def link(self, page, site=None):
+    def link(self, page, site=None, slug=None):
         """ Links the page to the specific site.
         =======================    =============================================================
         **Argument**               **Description**
@@ -965,7 +958,10 @@ class PageManager(object):
         _site_data = site.definition    
         _new_page['id'] = page.itemid
         _new_page['title'] = page.title
-        _new_page['slug'] = page.slug
+        if slug is not None:
+            _new_page['slug'] = slug
+        else:
+            _new_page['slug'] = page.slug
         _site_data['values']['pages'].append(_new_page)
         #Create new site dictionary
         _page_data = page.definition    
