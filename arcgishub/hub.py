@@ -5,12 +5,11 @@ from arcgis._impl.common._mixins import PropertyMap
 from arcgishub.sites import SiteManager, PageManager
 from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
+from collections import OrderedDict
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-import collections
 import json
 sns.set(color_codes=True)
 
@@ -173,7 +172,7 @@ class Hub(object):
         """
         return PageManager(self.gis)
 
-class Initiative(collections.OrderedDict):
+class Initiative(OrderedDict):
     """
     Represents an initiative within a Hub. An Initiative supports 
     policy- or activity-oriented goals through workflows, tools and team collaboration.
@@ -366,7 +365,7 @@ class Initiative(collections.OrderedDict):
             _followers_group = self._gis.groups.get(self.followers_group_id)
             #Fetch initiative site
             try:
-                _site = self.sites.get(self.site_id)
+                _site = self._hub.sites.get(self.site_id)
                 _site.protected = False
                 _site.delete()
             except:
@@ -635,7 +634,7 @@ class InitiativeManager(object):
             initiativelist.append(Initiative(self._hub, item))
         return initiativelist
         
-class Indicator(collections.OrderedDict):
+class Indicator(OrderedDict):
     """
     Represents an indicator within an initiative. Initiatives use Indicators to standardize 
     data sources for ready-to-use analysis and comparison. Indicators are measurements of a system 
@@ -1123,7 +1122,7 @@ class IndicatorManager(object):
             indicatorlist.append(Indicator(self._gis, self._initiativeItem, indicator))
         return indicatorlist
 
-class Event(collections.OrderedDict):
+class Event(OrderedDict):
     """
     Represents an event in a Hub. A Hub has many Events that can be associated with an Initiative.
     Events are meetings for people to support an Initiative. Events are scheduled by an organizer 

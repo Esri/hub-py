@@ -1,8 +1,9 @@
 from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis._impl.common._mixins import PropertyMap
+from arcgis._impl.common._isd import InsensitiveDict
 from datetime import datetime
-import collections
+from collections import OrderedDict
 import requests
 import json
 import os
@@ -20,13 +21,13 @@ def _lazy_property(fn):
         return getattr(self, attr_name)
     return _lazy_property
 
-class Site(collections.OrderedDict):
+class Site(OrderedDict):
     """
     Represents a site within a Hub. A site is a container for 
     web accessible content.
     """
     
-    def __init__(self, gis, siteItem):
+    def __init__(self, gis, siteItem, sections=None):
         """
         Constructs an empty Site object
         """
@@ -34,14 +35,13 @@ class Site(collections.OrderedDict):
         self._gis = gis
         try:
             self._sitedict = self.item.get_data()
-            pmap = PropertyMap(self._sitedict)
-            self.definition = pmap
+            self.definition = PropertyMap(self._sitedict)
         except:
             self.definition = None
             
     def __repr__(self):
         return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
-    
+
     @property
     def itemid(self):
         """
@@ -100,7 +100,7 @@ class Site(collections.OrderedDict):
         try:
             return self.item.properties['contentGroupId']
         except:
-            return self._initiative.content_group_id
+            return self.initiative.content_group_id
     
     @property
     def collab_group_id(self):
@@ -110,7 +110,7 @@ class Site(collections.OrderedDict):
         try:
             return self.item.properties['collaborationGroupId']
         except:
-            return self._initiative.collab_group_id
+            return self.initiative.collab_group_id
 
     @property
     def catalog_groups(self):
@@ -119,6 +119,13 @@ class Site(collections.OrderedDict):
         """
         return self.definition['catalog']['groups']
 
+    @property
+    def layout(self):
+        """
+        Return layout of a site
+        """
+        return InsensitiveDict(self.definition['values']['layout'])
+
     @_lazy_property
     def pages(self):
         """
@@ -126,10 +133,10 @@ class Site(collections.OrderedDict):
         See :class:`~hub.sites.PageManager`.
         """
         return PageManager(self._gis, self)
-
-    def add_card(self, section, card_data):
+       
+    def insert_card(self, section, card_data):
         """
-        Add a card to the existing site.
+        Add a new card to the existing site.
 
         ===============     ====================================================================
         **Argument**        **Description**
@@ -252,7 +259,27 @@ class Site(collections.OrderedDict):
             for key, value in site_properties.items():
                 _site_data[key] = value
             return self.item.update(_site_data, data, thumbnail, metadata)
- 
+
+    def update_layout(self, layout):
+        """ Updates the layout of the site.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        layout                    Required dictionary. The new layout dictionary to update to the site.
+        =====================     ====================================================================
+        :return:
+           A boolean indicating success (True) or failure (False).
+        .. code-block:: python
+            USAGE EXAMPLE: Update a site successfully
+            site1 = myHub.sites.get('itemId12345')
+            site_layout = site1.layout
+            site_layout.sections[0].rows[0].cards.pop(0)
+            site1.update_layout(layout = site_layout)
+            >> True
+        """
+        self.definition['values']['layout'] = layout._json()
+        return self.item.update(item_properties={'text': self.definition})
+
 class SiteManager(object):
     """
     Helper class for managing sites within a Hub. This class is not created by users directly. 
@@ -263,7 +290,7 @@ class SiteManager(object):
     def __init__(self, hub, initiative=None):
         self._hub = hub
         self._gis = self._hub.gis
-        self._initiative = initiative
+        self.initiative = initiative
 
     def _create_and_register_site(self, site, subdomain, site_data, content_group_id, collab_group_id):
         """
@@ -322,10 +349,10 @@ class SiteManager(object):
                 site_data['values']['theme']['globalNav'] = self._gis.properties['portalProperties']['sharedTheme']['header']
             except KeyError:
                 raise KeyError("Hub does not exist or is inaccessible.")
-
         site_data['values']['title'] = site.title
         site_data['values']['layout']['header']['component']['settings']['title'] = site.title
         site_data['values']['collaborationGroupId'] = collab_group_id
+        site_data['values']['layout']['sections'][6]['rows'][1]['cards'][0]['component']['settings']['selectedGroups'][0]['id'] = collab_group_id
         site_data['values']['subdomain'] = subdomain
         site_data['values']['defaultHostname'] = site.url
         site_data['values']['updatedBy'] = self._gis.users.me.username
@@ -334,6 +361,8 @@ class SiteManager(object):
             site_data['values']['clientId'] = client_key
         else:
             site_data['values']['clientId'] = 'arcgisonline'
+        if self._hub._hub_enabled:
+            site_data['values']['layout']['sections'][8]['rows'][1]['cards'][0]['component']['settings']['initiativeId'] = self.initiative.itemid
         site_data['values']['map'] = self._gis.properties['defaultBasemap']
         site_data['values']['defaultExtent'] = self._gis.properties['defaultExtent']
 
@@ -366,7 +395,7 @@ class SiteManager(object):
         #Check if initiative or site needs to be created for this gis
         if self._gis._portal.is_arcgisonline:
             if self._hub._hub_enabled:
-                if self._initiative is None:
+                if self.initiative is None:
                     raise Exception("Sites are created as part of an Initiative for your Hub. Please add a new initiative to proceed.")
 
         #For sites in ArcGIS Online
@@ -413,8 +442,8 @@ class SiteManager(object):
         #setting item properties based on type of site
         #Hub Premium Site
         if self._hub._hub_enabled:
-            content_group_id = self._initiative.content_group_id
-            collab_group_id = self._initiative.collab_group_id
+            content_group_id = self.initiative.content_group_id
+            collab_group_id = self.initiative.collab_group_id
             collab_group = self._gis.groups.get(collab_group_id)
             _item_dict = {
                         "type":item_type, 
@@ -429,8 +458,8 @@ class SiteManager(object):
                                     'schemaVersion': 1.2, 
                                     'collaborationGroupId': collab_group_id, 
                                     'contentGroupId': content_group_id, 
-                                    'followersGroupId': self._initiative.followers_group_id, 
-                                    'parentInitiativeId': self._initiative.itemid, 
+                                    'followersGroupId': self.initiative.followers_group_id, 
+                                    'parentInitiativeId': self.initiative.itemid, 
                                     'children': []
                                     }, 
                         "url":domain
@@ -512,7 +541,7 @@ class SiteManager(object):
         #New title
         if title is None:
             title = site.title + "-copy-%s" % int(now.timestamp() * 1000)
-        if self._initiative is None:
+        if self.initiative is None:
             if self._hub._hub_enabled:
                 return self._hub.initiatives.add(title, site=site)
         subdomain = title.replace(' ', '-').lower()
@@ -538,9 +567,9 @@ class SiteManager(object):
                         "url":domain
         }
         #Updating properties, groups for initiative sites
-        if self._initiative is not None:
-            content_group_id = self._initiative.content_group_id
-            collab_group_id = self._initiative.collab_group_id
+        if self.initiative is not None:
+            content_group_id = self.initiative.content_group_id
+            collab_group_id = self.initiative.collab_group_id
             collab_group = self._gis.groups.get(collab_group_id)
             _site_properties["properties"] = {
                                             'hasSeenGlobalNav': True, 
@@ -548,8 +577,8 @@ class SiteManager(object):
                                             'schemaVersion': 1.2, 
                                             'collaborationGroupId': collab_group_id, 
                                             'contentGroupId': content_group_id, 
-                                            'followersGroupId': self._initiative.followers_group_id, 
-                                            'parentInitiativeId': self._initiative.itemid, 
+                                            'followersGroupId': self.initiative.followers_group_id, 
+                                            'parentInitiativeId': self.initiative.itemid, 
                                             'children': []
                                         }
         else:
@@ -621,8 +650,8 @@ class SiteManager(object):
 
         sitelist = []
         
-        if self._initiative is not None:
-            _site_id = self._initiative.site_id
+        if self.initiative is not None:
+            _site_id = self.initiative.site_id
             return self.get(_site_id)
 
         #Build search query
@@ -646,7 +675,7 @@ class SiteManager(object):
             sitelist.append(Site(self._gis, item))
         return sitelist
 
-class Page(collections.OrderedDict):
+class Page(OrderedDict):
     """
     Represents a page belonging to a site in Hub. A Page is a layout of 
     content that can be rendered within the context of a Site
@@ -790,7 +819,8 @@ class PageManager(object):
         self._site = site
 
     def add(self, title, site=None):
-        """ Returns the pages linked to the specific site.
+        """ 
+        Returns the pages linked to the specific site.
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
@@ -902,7 +932,8 @@ class PageManager(object):
         return Page(self._gis, _cloned_page.item)
         
     def get(self, page_id):
-        """ Returns the page object for the specified page_id.
+        """ 
+        Returns the page object for the specified page_id.
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
@@ -922,13 +953,16 @@ class PageManager(object):
             raise TypeError("Item is not a valid page or is inaccessible.")
 
     def link(self, page, site=None, slug=None):
-        """ Links the page to the specific site.
+        """ 
+        Links the page to the specific site.
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         page                       Required string. The page object to link.
         -----------------------    -------------------------------------------------------------
         site                       Optional string. The site object to link page to.
+        -----------------------    -------------------------------------------------------------
+        slug                       Optional string. The slug reference of the page in this site.
         =======================    =============================================================
         :return:
             A bool containing True (for success) or False (for failure).
@@ -959,7 +993,7 @@ class PageManager(object):
         _new_page['id'] = page.itemid
         _new_page['title'] = page.title
         if slug is not None:
-            _new_page['slug'] = slug
+            _new_page['slug'] = slug.replace(' ', '-').lower()
         else:
             _new_page['slug'] = page.slug
         _site_data['values']['pages'].append(_new_page)
@@ -973,7 +1007,8 @@ class PageManager(object):
         return site.item.update(item_properties={'text': _site_data})
 
     def unlink(self, page, site=None):
-        """ Unlinks the page from the specific site.
+        """ 
+        Unlinks the page from the specific site.
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
