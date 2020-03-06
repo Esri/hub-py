@@ -498,7 +498,7 @@ class InitiativeManager(object):
         if site is None:
             site = _initiative.sites.add(title=title)
         else:
-            site = _initiative.sites.clone(site, title)
+            site = _initiative.sites.clone(site, pages=True, title=title)
         item.update(item_properties={'url': site.url, 'culture': self._gis.properties.user.culture})
         _initiative.site_url = site.item.url
         item.properties['site_id'] = site.itemid
@@ -549,7 +549,7 @@ class InitiativeManager(object):
             return new_initiative
         else:
             #Create new site if destination hub is basic/enterprise
-            new_site = self._hub.sites.clone(site, title=title)
+            new_site = self._hub.sites.clone(site, pages=True, title=title)
             return new_site
 
     def get(self, initiative_id):

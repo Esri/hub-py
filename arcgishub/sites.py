@@ -133,24 +133,6 @@ class Site(OrderedDict):
         See :class:`~hub.sites.PageManager`.
         """
         return PageManager(self._gis, self)
-       
-    def insert_card(self, section, card_data):
-        """
-        Add a new card to the existing site.
-
-        ===============     ====================================================================
-        **Argument**        **Description**
-        ---------------     --------------------------------------------------------------------
-        section             Required integer. Index of particular section.
-        ---------------     --------------------------------------------------------------------
-        card_data           Required list. Card data to be added.
-        ===============     ====================================================================
-        :return:
-           A boolean indicating success (True) or failure (False).
-        """
-        new_row = {'cards':card_data}
-        self.definition['values']['layout']['sections'][section]['rows'].append(new_row)
-        self.item.update(item_properties={'text': self.definition})
 
     def add_catalog_group(self, group_id):
         """
@@ -190,6 +172,13 @@ class Site(OrderedDict):
             site1.delete()
             >> True
         """
+        #Unlink site from pages. Delete page if not linked to other sites
+        site_pages = self.pages.search()
+        #If pages exist
+        if len(site_pages) > 0:
+            for page in site_pages:
+                #Unlink page (deletes if)
+                self.pages.unlink(page)
         #Delete enterprise site
         if not self._gis._portal.is_arcgisonline:
              #Fetch Enterprise Site Collaboration group
@@ -352,7 +341,6 @@ class SiteManager(object):
         site_data['values']['title'] = site.title
         site_data['values']['layout']['header']['component']['settings']['title'] = site.title
         site_data['values']['collaborationGroupId'] = collab_group_id
-        site_data['values']['layout']['sections'][6]['rows'][1]['cards'][0]['component']['settings']['selectedGroups'][0]['id'] = collab_group_id
         site_data['values']['subdomain'] = subdomain
         site_data['values']['defaultHostname'] = site.url
         site_data['values']['updatedBy'] = self._gis.users.me.username
@@ -361,8 +349,17 @@ class SiteManager(object):
             site_data['values']['clientId'] = client_key
         else:
             site_data['values']['clientId'] = 'arcgisonline'
+        #Add collaboration group to gallery card only if it exists in the usual spot
+        try:
+            site_data['values']['layout']['sections'][6]['rows'][1]['cards'][0]['component']['settings']['selectedGroups'][0]['id'] = collab_group_id
+        except:
+            pass
+        #Link follow button to current initiative only if it exists in the usual spot
         if self._hub._hub_enabled:
-            site_data['values']['layout']['sections'][8]['rows'][1]['cards'][0]['component']['settings']['initiativeId'] = self.initiative.itemid
+            try:
+                site_data['values']['layout']['sections'][8]['rows'][1]['cards'][0]['component']['settings']['initiativeId'] = self.initiative.itemid
+            except:
+                pass
         site_data['values']['map'] = self._gis.properties['defaultBasemap']
         site_data['values']['defaultExtent'] = self._gis.properties['defaultExtent']
 
@@ -381,12 +378,12 @@ class SiteManager(object):
            The site if successfully added, None if unsuccessful.
         .. code-block:: python
             USAGE EXAMPLE: Add an open data site in Hub successfully 
-            site1 = myHub.sites.add(title='My first site', domain='first-site', group_id='4ef..')
+            site1 = myHub.sites.add(title='My first site')
             site1.item
 
         .. code-block:: python
             USAGE EXAMPLE: Add an initiative site successfully 
-            initiative_site = initiative1.sites.add(title=title, domain=title, group_id='4ef..')
+            initiative_site = initiative1.sites.add(title=title)
             site1.item
         """
 
@@ -512,14 +509,14 @@ class SiteManager(object):
         
         with open(data_path) as f:
             _site_data = json.load(f)
-       
+
         #Register site and update its data
         _data = self._create_and_register_site(site, subdomain, _site_data, content_group_id, collab_group_id)
         _data = json.dumps(_data)
         site.update(item_properties={'text': _data, 'url': domain})
         return Site(self._gis, site)
 
-    def clone(self, site, title=None):
+    def clone(self, site, pages=True, title=None):
         """
         Clone allows for the creation of a site that is derived from the current site.
 
@@ -527,6 +524,8 @@ class SiteManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         site                Required Site object of site to be cloned.
+        ---------------     --------------------------------------------------------------------
+        pages               Optional Boolean. Decides if pages will be copied. Default is True.
         ---------------     --------------------------------------------------------------------
         title               Optional String.
         ===============     ====================================================================
@@ -595,16 +594,28 @@ class SiteManager(object):
             collab_group.protected = True
             
         #Create site item, share with group
-        new_site = self._gis.content.add(_site_properties, owner=self._gis.users.me.username)
+        new_item = self._gis.content.add(_site_properties, owner=self._gis.users.me.username)
 
         #Share with necessary group
-        new_site.share(groups=[collab_group])
+        new_item.share(groups=[collab_group])
 
         #Register new site and update its data
-        _data = self._create_and_register_site(new_site, subdomain, site.definition, content_group_id, collab_group_id)
+        _data = self._create_and_register_site(new_item, subdomain, site.definition, content_group_id, collab_group_id)
 
-        new_site.update(item_properties={'text': _data, 'url': domain})
-        return Site(self._gis, new_site)
+        new_item.update(item_properties={'text': _data, 'url': domain})
+        new_site = Site(self._gis, new_item)
+
+        #Pages of the site
+        site_pages = site.pages.search()
+        #If pages exist
+        if len(site_pages) > 0:
+            #Check the value of param
+            if pages:
+                for page in site_pages:
+                    new_site.pages.unlink(page)
+                    new_site.pages.clone(page)
+
+        return new_site
 
     def get(self, site_id):
         """ Returns the site object for the specified site_id.
@@ -743,7 +754,7 @@ class Page(OrderedDict):
     @property
     def slug(self):
         """
-        Returns the slug
+        Returns the page slug
         """
         return self.title.replace(' ', '-').lower()
 
@@ -769,7 +780,7 @@ class Page(OrderedDict):
         :return:
            A boolean indicating success (True) or failure (False).
         .. code-block:: python
-            USAGE EXAMPLE: Update a site successfully
+            USAGE EXAMPLE: Update a page successfully
             page1 = mySite.pages.get('itemId12345')
             page1.update(page_properties={'description':'Description for page.'})
             >> True
@@ -782,13 +793,13 @@ class Page(OrderedDict):
  
     def delete(self):
         """
-        Deletes the site. If unable to delete, raises a RuntimeException.
+        Deletes the page. If unable to delete, raises a RuntimeException.
         :return:
             A bool containing True (for success) or False (for failure). 
         .. code-block:: python
-            USAGE EXAMPLE: Delete a site successfully
-            site1 = myHub.sites.get('itemId12345')
-            site1.delete()
+            USAGE EXAMPLE: Delete a page successfully
+            page1 = myHub.pages.get('itemId12345')
+            page1.delete()
             >> True
         """
         #Unlink sites
@@ -802,8 +813,6 @@ class Page(OrderedDict):
         self.item.protect(enable=False)
         #Delete page item
         self.item.delete()
-
-
 
 class PageManager(object):
     """
@@ -902,9 +911,9 @@ class PageManager(object):
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        site                Required Page object of page to be cloned.
+        page                Required Page object of page to be cloned.
         ---------------     --------------------------------------------------------------------
-        title               Optional String.
+        site                Optional Site object.
         ===============     ====================================================================
         :return:
            Page.
@@ -919,7 +928,7 @@ class PageManager(object):
         #If site object is not provided
         if site is None:
             if self._site is None:
-                raise Exception('Site object needed for unlinking page')
+                raise Exception('Site object needed for cloning page')
         #If called from a specified site
         if self._site is not None:
             site = self._site
@@ -1100,5 +1109,3 @@ class PageManager(object):
         for item in items:
             pagelist.append(Page(self._gis, item))
         return pagelist
-        
-

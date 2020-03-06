@@ -11,7 +11,7 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     
-    version='2.1.0',
+    version='2.2.0',
     description='ArcGIS Hub Python API',
     long_description='Python API to automate your Hub processes',
     #url='http://pypi.python.org/pypi/TowelStuff/',
@@ -50,5 +50,5 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['six', 'arcgis'],
+    install_requires=['six', 'arcgis>=1.8.0'],
 )
