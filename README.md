@@ -3,6 +3,7 @@
 * The library now equips users with tools needed to work with the __Sites__ in your Hub or Enterprise organization. You can create new sites and pages, search for existing sites and pages, as well as edit their layout and clone them, not only within the same organization, but over to different organizations as well.
 * It is built over the `arcgis` Python API. Ensure you are using the most updated version of the `arcgis` API to use `arcgishub`.  Click [here](https://developers.arcgis.com/python/) to learn more about the `arcgis` API.
 * The intended UI for this API is the Jupyter Notebook development environment. 
+* This API is built to work with Sites in Enterprise versions >= 10.8
 
 In order to install Python, install the bundle that comes with the Anaconda distribution (Refer [this](https://www.anaconda.com/distribution/))
 
