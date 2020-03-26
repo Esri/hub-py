@@ -559,10 +559,6 @@ class SiteManager(object):
                         "typekeywords":typekeywords, 
                         "tags": ["Hub Site"], 
                         "title":title, 
-                        "properties":{
-                                    'hasSeenGlobalNav': True, 
-                                    'schemaVersion': 1, 
-                                    },
                         "url":domain
         }
         #Updating properties, groups for initiative sites
@@ -592,6 +588,13 @@ class SiteManager(object):
             #Protect groups from accidental deletion
             content_group.protected = True
             collab_group.protected = True
+            _site_properties["properties"] = {
+                                            'hasSeenGlobalNav': True, 
+                                            'createdFrom': 'solutionPortalSiteTemplate', 
+                                            'schemaVersion': 1.2, 
+                                            'collaborationGroupId': collab_group_id, 
+                                            'contentGroupId': content_group_id
+                                            }
             
         #Create site item, share with group
         new_item = self._gis.content.add(_site_properties, owner=self._gis.users.me.username)
@@ -612,7 +615,10 @@ class SiteManager(object):
             #Check the value of param
             if pages:
                 for page in site_pages:
-                    new_site.pages.unlink(page)
+                    try:
+                        new_site.pages.unlink(page)
+                    except:
+                        pass
                     new_site.pages.clone(page)
 
         return new_site

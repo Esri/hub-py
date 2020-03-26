@@ -1361,7 +1361,8 @@ class EventManager(object):
         -----------------  ---------------------------------------------------------------------
         address1           Required string. Street address for the venue.
         -----------------  ---------------------------------------------------------------------
-        status             Required string. Access of event. Valid values are private, planned, public.
+        status             Required string. Access of event. Valid values are private, planned, 
+                           public, draft.
         -----------------  ---------------------------------------------------------------------
         startDate          Required start date of the event in milliseconds since UNIX epoch.
         -----------------  ---------------------------------------------------------------------
@@ -1376,7 +1377,10 @@ class EventManager(object):
         onlineLocation     Optional string. Web URL or other details for online event.
         -----------------  ---------------------------------------------------------------------
         organizers         Optional list of dictionary of keys `name` and `contact` for each organizer's 
-                           name and email. Default values are name and email of event creator.
+                           name and email. Default values are name, email, username of event creator.
+        -----------------  ---------------------------------------------------------------------
+        sponsors           Optional list of dictionary of keys `name` and `contact` for each sponsor's 
+                           name and contact.
         =================  =====================================================================
 
         :return:
@@ -1405,8 +1409,23 @@ class EventManager(object):
         try:
             event_properties['organizers']
         except:
-            _organizers = str({'name':self._gis.users.me.fullName, 'contact':self._gis.users.me.email})
+            _organizers_list = [{"name":self._gis.users.me.fullName, "contact": self._gis.users.me.email, "username": self._gis.users.me.username}]
+            _organizers = json.dumps(_organizers_list)
             event_properties['organizers'] = _organizers
+        #Set sponsors if not provided
+        try:
+            event_properties['sponsors']
+            event_properties['sponsors'] = json.dumps(event_properties['sponsors'])
+        except:
+            _sponsors = []
+            event_properties['sponsors'] = json.dumps(_sponsors)
+        #Set onlineLocation if not provided
+        try:
+            event_properties['onlineLocation']
+        except:
+            _onlineLocation = ''
+            event_properties['onlineLocation'] = _onlineLocation
+
         event_properties['schemaVersion'] = 2
         event_properties['location'] = ''
         event_properties['url'] = event_properties['title'].replace(' ', '-').lower()
