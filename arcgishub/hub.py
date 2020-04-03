@@ -259,14 +259,17 @@ class Initiative(OrderedDict):
         """
         Returns the itemid of the initiative site
         """
-        return self._initiativedict['steps'][0]['itemIds'][0]
+        try:
+            return self.item.properties['siteId']
+        except:
+            return self._initiativedict['steps'][0]['itemIds'][0]
 
     @property
     def site_url(self):
         """
         Getter/Setter for the url of the initiative site
         """
-        return self.item.url
+        return self.sites.get(self.site_id).url
 
     @site_url.setter
     def site_url(self, value):
@@ -1310,7 +1313,7 @@ class Event(OrderedDict):
         params = {'f': 'json', 'features': event_data}
         update_event = self._gis._con.post(path=url, postdata=params)
         return update_event['updateResults'][0]['success']
-    
+
 class EventManager(object):
     """Helper class for managing events within a Hub. This class is not created by users directly. 
     An instance of this class, called 'events', is available as a property of the Hub object. Users
@@ -1425,6 +1428,13 @@ class EventManager(object):
         except:
             _onlineLocation = ''
             event_properties['onlineLocation'] = _onlineLocation
+        #Set geometry if not provided
+        try:
+            event_properties['geometry']
+            geometry = event_properties['geometry']
+            del event_properties['geometry']
+        except:
+            geometry = geocode(event_properties['address1'])[0]['location']
 
         event_properties['schemaVersion'] = 2
         event_properties['location'] = ''
@@ -1441,7 +1451,7 @@ class EventManager(object):
         
         #Build new event feature and create it
         _feature["attributes"] = event_properties
-        _feature["geometry"] = geocode(event_properties['address1'])[0]['location']
+        _feature["geometry"] = geometry
         event_data = [_feature]
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/addFeatures'
         params = {'f': 'json', 'features': event_data}
