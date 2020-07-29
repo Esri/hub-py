@@ -51,6 +51,7 @@ class Hub(object):
         self._password = password
         self.url = url
         self.gis = GIS(self.url, self._username, self._password)
+        self.search = self._instance_search
         try:
             self._gis_id = self.gis.properties.id
         except AttributeError:
@@ -144,6 +145,36 @@ class Hub(object):
             print("Hub does not exist or is inaccessible.")
             raise
     
+    @staticmethod
+    def search(query='', url=None, username=None, password=None, **kwargs):
+        """
+        Returns a list of hubs based on a search query of GIS content
+        """
+        gis = GIS(url, username, password)
+        item_type = 'Hub *'
+
+        if 'query' in kwargs:
+            if query == None or query == '':
+                query = kwargs['query']
+            del kwargs['query']
+        if 'item_type' in kwargs:
+            if len(kwargs['item_type']) > 0:
+                item_type = kwargs['item_type']
+            del kwargs['item_type']
+
+        return gis.content.search(query=query, item_type=item_type, **kwargs)
+        
+    def _instance_search(self, query='', **kwargs):
+        """
+        Provides search functionality within the organization's hub
+        """
+        item_type = 'Hub *'
+        if 'item_type' in kwargs:
+            if len(kwargs['item_type']) > 0:
+                item_type = kwargs['item_type']
+            del kwargs['item_type']
+        return self.gis.content.search(query=query, item_type=item_type, **kwargs)
+
     @_lazy_property
     def initiatives(self):
         """
