@@ -2,7 +2,7 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
-from arcgishub.sites import SiteManager, PageManager
+from arcgishub.sites import Site, SiteManager, Page, PageManager
 from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
 from collections import OrderedDict
@@ -51,7 +51,6 @@ class Hub(object):
         self._password = password
         self.url = url
         self.gis = GIS(self.url, self._username, self._password)
-        self.search = self._instance_search
         try:
             self._gis_id = self.gis.properties.id
         except AttributeError:
@@ -144,36 +143,6 @@ class Hub(object):
         except:
             print("Hub does not exist or is inaccessible.")
             raise
-    
-    @staticmethod
-    def search(query='', url=None, username=None, password=None, **kwargs):
-        """
-        Returns a list of hubs based on a search query of GIS content
-        """
-        gis = GIS(url, username, password)
-        item_type = 'Hub *'
-
-        if 'query' in kwargs:
-            if query == None or query == '':
-                query = kwargs['query']
-            del kwargs['query']
-        if 'item_type' in kwargs:
-            if len(kwargs['item_type']) > 0:
-                item_type = kwargs['item_type']
-            del kwargs['item_type']
-
-        return gis.content.search(query=query, item_type=item_type, **kwargs)
-        
-    def _instance_search(self, query='', **kwargs):
-        """
-        Provides search functionality within the organization's hub
-        """
-        item_type = 'Hub *'
-        if 'item_type' in kwargs:
-            if len(kwargs['item_type']) > 0:
-                item_type = kwargs['item_type']
-            del kwargs['item_type']
-        return self.gis.content.search(query=query, item_type=item_type, **kwargs)
 
     @_lazy_property
     def initiatives(self):
@@ -202,6 +171,76 @@ class Hub(object):
         The resource manager for Hub pages. See :class:`~hub.sites.PageManager`.
         """
         return PageManager(self.gis)
+
+    def search(self, title=None, owner=None, created=None, modified=None, tags=None, scope=None):
+        """
+        Provides search functionality within the organization's hub. Results will be organized
+        as either Initiatives  
+        
+       ===============     ====================================================================
+        **Argument**        **Description**
+        ---------------     --------------------------------------------------------------------
+        title               Optional string. Return hub items with provided string in title.
+        ---------------     --------------------------------------------------------------------
+        owner               Optional string. Return hub items owned by a username.
+        ---------------     --------------------------------------------------------------------
+        created             Optional string. Date the hub item was created.
+                            Shown in milliseconds since UNIX epoch.
+        ---------------     --------------------------------------------------------------------
+        modified            Optional string. Date the hub item was last modified.
+                            Shown in milliseconds since UNIX epoch
+        ---------------     --------------------------------------------------------------------
+        tags                Optional string. User-defined tags that describe the hub item.
+        ---------------     --------------------------------------------------------------------
+        scope               Optional string. Defines the scope of search.
+                            Valid values are 'official', 'community' or 'all'.
+        ===============     ====================================================================
+        """
+        resultList = []
+        #Build search query
+        query = 'typekeywords:hub'
+        if title!=None:
+            query += ' AND title:'+title
+        if owner!=None:
+            query += ' AND owner:'+owner
+        if created!=None:
+            query += ' AND created:'+created
+        if modified!=None:
+            query += ' AND modified:'+modified
+        if tags!=None:
+            query += ' AND tags:'+tags
+        
+        #Apply org scope and search
+        if scope is None or self.gis.url=='https://www.arcgis.com':
+            items = self.gis.content.search(query=query, item_type='Hub *', max_items=5000)
+        elif scope.lower()=='official':
+            query += ' AND access:public'
+            _gis = GIS(self.enterprise_org_url)
+            items = _gis.content.search(query=query, item_type='Hub *', max_items=5000)
+        elif scope.lower()=='community':
+            query += ' AND access:public'
+            _gis = GIS(self.community_org_url)
+            items = _gis.content.search(query=query, item_type='Hub *', max_items=5000)
+        elif scope.lower()=='all':
+            items = self.gis.content.search(query=query, item_type='Hub *', outside_org=True, max_items=5000)
+        else:
+            raise Exception("Invalid value for scope")
+
+        for item in items:
+            if "hubInitiative" in item.typeKeywords:
+                resultList.append(Initiative(self, item))
+            elif "hubSite" in item.typeKeywords:
+                resultList.append(Site(self.gis, item))
+            elif "hubPage" in item.typeKeywords:
+                resultList.append(Page(self.gis, item))
+            elif "hubInitiativeTemplate" in item.typeKeywords:
+                # leaving room for an InitiativeTemplate object. 
+                # In the mean time, treat it as an item
+                resultList.append(item)
+            else:
+                # not sure what this is. Will just send back the item
+                resultList.append(item)
+        return resultList
 
 class Initiative(OrderedDict):
     """
