@@ -763,6 +763,15 @@ class Page(OrderedDict):
         Returns the page slug
         """
         return self.title.replace(' ', '-').lower()
+    
+    @property
+    def layout(self):
+        """
+        Return layout of a page
+        """
+        if self.definition is None:
+            return None
+        return InsensitiveDict(self.definition['values']['layout'])
 
     def update(self, page_properties=None, slug=None, data=None, thumbnail=None, metadata=None):
         """ Updates the page.
@@ -797,6 +806,30 @@ class Page(OrderedDict):
                 _page_data[key] = value
             return self.item.update(_page_data, data, thumbnail, metadata)
  
+    def update_layout(self, layout):
+        """ Updates the layout of the page.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        layout                    Required dictionary. The new layout dictionary to update to the page.
+        =====================     ====================================================================
+        :return:
+           A boolean indicating success (True) or failure (False).
+        .. code-block:: python
+            USAGE EXAMPLE: Update a page successfully
+            page1 = myHub.pages.get('itemId12345')
+            page_layout = page1.layout
+            page_layout.sections[0].rows[0].cards.pop(0)
+            page1.update_layout(layout = page_layout)
+            >> True
+        """
+        if self.definition is None:
+            # no page definition, for some reason
+            return False
+        self.definition['values']['layout'] = layout._json()
+        self.definition['values']['updatedBy'] = self._gis.users.me.username
+        return self.item.update(item_properties={'text': self.definition})
+
     def delete(self):
         """
         Deletes the page. If unable to delete, raises a RuntimeException.
