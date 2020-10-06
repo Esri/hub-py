@@ -216,6 +216,42 @@ class Site(OrderedDict):
             else:
                 return _delete_domain.content
 
+    def search(self, query=None, item_type=None):
+        """ 
+        Search and filter content for a site. 
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        query                     Optional string. Filters items by presence of search query in title.
+        ---------------------     --------------------------------------------------------------------
+        item_type                 Optional list. Returns items of particular type.
+        =====================     ====================================================================
+        :return:
+           List of items shared with this site.
+        .. code-block:: python
+            USAGE EXAMPLE: Succcessfully fetch items of item_type 'Web Mapping Application' 
+            for particular query 'school' for site
+            site1 = myHub.sites.get('itemId12345')
+            site_apps = site1.search(query='school', item_type='Web Map')
+            site_apps
+            >> List of relevant items
+        """
+        groups = self.catalog_groups
+        all_content = []
+        for group_id in groups:
+            group = self._gis.groups.get(group_id)
+            try:
+                all_content = all_content + group.content()
+            except AttributeError:
+                pass
+        #eliminate duplicate items
+        result = [i for n, i in enumerate(all_content) if i not in all_content[:n]]
+        if query!=None:
+            result = [item for item in result if query.lower() in item.title.lower()]
+        if item_type!=None:
+            result = [item for item in result if item.type==item_type]
+        return result
+
     def update(self, site_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the site.
         .. note::
@@ -249,6 +285,7 @@ class Site(OrderedDict):
                 _site_data[key] = value
             return self.item.update(_site_data, data, thumbnail, metadata)
 
+    
     def update_layout(self, layout):
         """ Updates the layout of the site.
         =====================     ====================================================================
