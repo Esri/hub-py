@@ -679,6 +679,32 @@ class SiteManager(object):
             return Site(self._gis, siteItem)
         else:
             raise TypeError("Item is not a valid site or is inaccessible.")
+
+    def get_by_domain(self, domain_url):
+        """ Returns the site object for the specified domain url.
+        =======================    =============================================================
+        **Argument**               **Description**
+        -----------------------    -------------------------------------------------------------
+        domain_url                 Required string. The site url.
+        =======================    =============================================================
+        :return:
+            The site object if the item is found, None if the item is not found.
+        .. code-block:: python
+            USAGE EXAMPLE: Fetch a site successfully
+            site1 = myHub.sites.get_by_domain('opendata.dc.gov')
+            site1.item
+        """
+        if 'https' in domain_url:
+            domain_url = domain_url[7:]
+        _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+        path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
+        _site_domain = requests.get(path, headers = _HEADERS)
+        siteId = _site_domain.json()['siteId']
+        siteItem = self._gis.content.get(siteId)
+        if 'hubSite' in siteItem.typeKeywords:
+            return Site(self._gis, siteItem)
+        else:
+            raise TypeError("Item is not a valid site or is inaccessible.")
             
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
@@ -687,6 +713,8 @@ class SiteManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         title               Optional string. Return sites with provided string in title.
+        ---------------     --------------------------------------------------------------------
+        url                 Optional string. Return sites with provided string in url.
         ---------------     --------------------------------------------------------------------
         owner               Optional string. Return sites owned by a username.
         ---------------     --------------------------------------------------------------------
