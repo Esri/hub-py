@@ -45,11 +45,14 @@ class Hub(object):
     ================    ===============================================================
     """
     
-    def __init__(self, url, username=None, password=None):
+    def __init__(self, url=None, username=None, password=None):
         #self.gis = gis
         self._username = username
         self._password = password
-        self.url = url
+        if url==None:
+            self.url = 'https://www.arcgis.com'
+        else:
+            self.url = url
         self.gis = GIS(self.url, self._username, self._password)
         try:
             self._gis_id = self.gis.properties.id
@@ -1267,6 +1270,23 @@ class Event(OrderedDict):
         Returns co-ordinates of the event location
         """
         return self._eventdict['geometry']
+
+    def add_attachment(self, image_url):
+        """
+        Allows for adding an image to an event.
+        Event should be of type jpeg, jpg or png.
+        Max size is 10MB.
+        :return:
+            A bool containing True (for success) or False (for failure). 
+        .. code-block:: python
+            USAGE EXAMPLE: Add image to existing event
+            event1 = myhub.events.get(24)
+            event1.add_attachment(image_url)
+            >> True
+        """
+        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(self.event_id)+'/addAttachment'
+        params = {'attachment': image_url, 'token': self._gis._con.token}
+        attachment = self._gis._con.post(path=url, postdata=params)
 
     def delete(self):
         """

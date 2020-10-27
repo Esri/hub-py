@@ -4,6 +4,7 @@ from arcgis._impl.common._mixins import PropertyMap
 from arcgis._impl.common._isd import InsensitiveDict
 from datetime import datetime
 from collections import OrderedDict
+from urllib.parse import urlparse
 import requests
 import json
 import os
@@ -689,22 +690,42 @@ class SiteManager(object):
         =======================    =============================================================
         :return:
             The site object if the item is found, None if the item is not found.
+        Note: You may only fetch sites by domain local to your environment.
+        E.g. If your Hub instance is an ArcGIS Online instance, then you can 
+        fetch ArcGIS Online sites by url, and if you have signed into an ArcGIS
+        Enterprise Instance, only sites on premise will be available.
         .. code-block:: python
             USAGE EXAMPLE: Fetch a site successfully
             site1 = myHub.sites.get_by_domain('opendata.dc.gov')
             site1.item
         """
-        if 'https' in domain_url:
-            domain_url = domain_url[7:]
-        _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
-        path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
-        _site_domain = requests.get(path, headers = _HEADERS)
-        siteId = _site_domain.json()['siteId']
-        siteItem = self._gis.content.get(siteId)
-        if 'hubSite' in siteItem.typeKeywords:
-            return Site(self._gis, siteItem)
+        #Check if Hub(GIS) is an ArcGIS Online instance
+        if self._gis._portal.is_arcgisonline:
+            if 'http' in domain_url:
+                domain_url = urlparse(domain_url).netloc
+            if 'devext.arcgis.com' in self._gis._portal.hostname:
+                path = 'https://hubdev.arcgis.com/utilities/domains/'+domain_url
+            elif 'mapsqa.arcgis.com' in self._gis._portal.hostname:
+                path = 'https://hubqa.arcgis.com/utilities/domains/'+domain_url
+            else:
+                path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
+            #fetch site itemid from domain service
+            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+            _site_domain = requests.get(path, headers = _HEADERS)
+            try:
+                siteId = _site_domain.json()['siteId']
+            except KeyError:
+                raise Exception("Domain record not found. Please check your domain_url.")
+            return self.get(siteId)
+        #For ArcGIS Enterprise
         else:
-            raise TypeError("Item is not a valid site or is inaccessible.")
+            subdomain = domain_url.split("#/",1)[1]
+            _query = 'hubsubdomain|'+subdomain
+            items = self._gis.content.search(query='typekeywords:hubSite,'+_query, max_items=5000)
+            #Return searched sites
+            for item in items:
+                sitelist.append(Site(self._gis, item))
+            return sitelist
             
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
@@ -713,8 +734,6 @@ class SiteManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         title               Optional string. Return sites with provided string in title.
-        ---------------     --------------------------------------------------------------------
-        url                 Optional string. Return sites with provided string in url.
         ---------------     --------------------------------------------------------------------
         owner               Optional string. Return sites owned by a username.
         ---------------     --------------------------------------------------------------------
