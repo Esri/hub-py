@@ -703,12 +703,7 @@ class SiteManager(object):
         if self._gis._portal.is_arcgisonline:
             if 'http' in domain_url:
                 domain_url = urlparse(domain_url).netloc
-            if 'devext.arcgis.com' in self._gis._portal.hostname:
-                path = 'https://hubdev.arcgis.com/utilities/domains/'+domain_url
-            elif 'mapsqa.arcgis.com' in self._gis._portal.hostname:
-                path = 'https://hubqa.arcgis.com/utilities/domains/'+domain_url
-            else:
-                path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
+            path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
             #fetch site itemid from domain service
             _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
             _site_domain = requests.get(path, headers = _HEADERS)
