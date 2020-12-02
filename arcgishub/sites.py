@@ -5,6 +5,7 @@ from arcgis._impl.common._isd import InsensitiveDict
 from datetime import datetime
 from collections import OrderedDict
 from urllib.parse import urlparse
+import time
 import requests
 import json
 import os
@@ -330,6 +331,7 @@ class SiteManager(object):
         if self._gis._portal.is_arcgisonline:
 
             #register site as an app
+            time.sleep(3)
             _app_dict = site.register(app_type='browser', redirect_uris=[site.url])
             client_key = _app_dict['client_id']
 
@@ -341,7 +343,8 @@ class SiteManager(object):
             #Create domain entry for new site
             _HEADERS = {
                     'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token
+                    'Authorization': self._gis._con.token,
+                    'Referer': gis._con._referer
                     }
             _body = {
                 'hostname': subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com', 
@@ -350,7 +353,8 @@ class SiteManager(object):
                 'clientKey': client_key, 
                 'orgId': self._gis.properties.id, 
                 'orgKey': self._gis.properties['urlKey'], 
-                'orgTitle':self._gis.properties['name']
+                'orgTitle':self._gis.properties['name'],
+                'sslOnly':True
                 }
             path = 'https://hub.arcgis.com/utilities/domains'
             _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
@@ -490,7 +494,7 @@ class SiteManager(object):
                         "properties":{
                                     'hasSeenGlobalNav': True, 
                                     'createdFrom': 'defaultInitiativeSiteTemplate', 
-                                    'schemaVersion': 1.2, 
+                                    'schemaVersion': 1.3, 
                                     'collaborationGroupId': collab_group_id, 
                                     'contentGroupId': content_group_id, 
                                     'followersGroupId': self.initiative.followers_group_id, 
@@ -524,7 +528,7 @@ class SiteManager(object):
                         "properties":{
                                     'hasSeenGlobalNav': True, 
                                     'createdFrom': 'solutionPortalSiteTemplate', 
-                                    'schemaVersion': 1.2, 
+                                    'schemaVersion': 1.3, 
                                     'contentGroupId': content_group_id,
                                     'collaborationGroupId': collab_group.id,
                                     'children': []
