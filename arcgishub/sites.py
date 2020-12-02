@@ -175,12 +175,16 @@ class Site(OrderedDict):
             >> True
         """
         #Unlink site from pages. Delete page if not linked to other sites
-        site_pages = self.pages.search()
-        #If pages exist
-        if len(site_pages) > 0:
-            for page in site_pages:
-                #Unlink page (deletes if)
-                self.pages.unlink(page)
+        try:
+            site_pages = self.pages.search()
+            #If pages exist
+            if len(site_pages) > 0:
+                for page in site_pages:
+                    #Unlink page (deletes if)
+                    self.pages.unlink(page)
+        #In case site definition is empty
+        except:
+            pass
         #Delete enterprise site
         if not self._gis._portal.is_arcgisonline:
              #Fetch Enterprise Site Collaboration group
@@ -204,12 +208,12 @@ class Site(OrderedDict):
             #Disable delete protection on site
             self.item.protect(enable=False)
             #Fetch siteId from domain entry
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
             path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
             _site_domain = requests.get(path, headers = _HEADERS)
             _siteId = _site_domain.json()[0]['id']
             #Delete domain entry
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
             path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
             _delete_domain = requests.delete(path, headers = _HEADERS)
             if _delete_domain.status_code==200:
@@ -344,7 +348,7 @@ class SiteManager(object):
             _HEADERS = {
                     'Content-Type': 'application/json', 
                     'Authorization': self._gis._con.token,
-                    'Referer': gis._con._referer
+                    'Referer': self._gis._con._referer
                     }
             _body = {
                 'hostname': subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com', 
@@ -709,7 +713,7 @@ class SiteManager(object):
                 domain_url = urlparse(domain_url).netloc
             path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
             #fetch site itemid from domain service
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token}
+            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
             _site_domain = requests.get(path, headers = _HEADERS)
             try:
                 siteId = _site_domain.json()['siteId']
@@ -1177,8 +1181,8 @@ class PageManager(object):
         if self._site is not None:
             pages = self._site.definition['values']['pages']
             items = [self._gis.content.get(page['id']) for page in pages]
+        #Build search query
         else:
-            #Build search query
             query = 'typekeywords:hubPage'
             if title!=None:
                 query += ' AND title:'+title
