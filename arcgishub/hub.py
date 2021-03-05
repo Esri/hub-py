@@ -42,10 +42,36 @@ class Hub(object):
     password            Optional string as entered while connecting to GIS. If a username is 
                         provided, a password is expected.  This is case-sensitive. If the password 
                         is not provided, the user is prompted in the interactive dialog.
+    ----------------    ---------------------------------------------------------------
+    key_file            Optional string. The file path to a user's key certificate for PKI
+                        authentication
+    ----------------    ---------------------------------------------------------------
+    cert_file           Optional string. The file path to a user's certificate file for PKI
+                        authentication. If a PFX or P12 certificate is used, a password is required.
+                        If a PEM file is used, the key_file is required.
+    ----------------    ---------------------------------------------------------------
+    verify_cert         Optional boolean. If a site has an invalid SSL certificate or is
+                        being accessed via the IP or hostname instead of the name on the
+                        certificate, set this value to False.  This will ensure that all
+                        SSL certificate issues are ignored.
+                        The default is True.
+                        **Warning** Setting the value to False can be a security risk.
+    ----------------    ---------------------------------------------------------------
+    set_active          Optional boolean. The default is True.  If True, the GIS object
+                        will be used as the default GIS object throughout the whole
+                        scripting session.
+    ----------------    ---------------------------------------------------------------
+    client_id           Optional string. Used for OAuth authentication.  This is the
+                        client ID value.
+    ----------------    ---------------------------------------------------------------
+    profile             Optional string. the name of the profile that the user wishes to use
+                        to authenticate, if set, the identified profile will be used to login
+                        to the specified GIS.
     ================    ===============================================================
     """
     
-    def __init__(self, url=None, username=None, password=None):
+    def __init__(self, url=None, username=None, password=None, key_file=None, cert_file=None,
+                 verify_cert=True, set_active=True, client_id=None, profile=None):
         #self.gis = gis
         self._username = username
         self._password = password

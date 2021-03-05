@@ -5,7 +5,6 @@ from arcgis._impl.common._isd import InsensitiveDict
 from datetime import datetime
 from collections import OrderedDict
 from urllib.parse import urlparse
-import time
 import requests
 import json
 import os
@@ -335,7 +334,6 @@ class SiteManager(object):
         if self._gis._portal.is_arcgisonline:
 
             #register site as an app
-            time.sleep(3)
             _app_dict = site.register(app_type='browser', redirect_uris=[site.url])
             client_key = _app_dict['client_id']
 
