@@ -79,7 +79,8 @@ class Hub(object):
             self.url = 'https://www.arcgis.com'
         else:
             self.url = url
-        self.gis = GIS(self.url, self._username, self._password)
+        self.gis = GIS(self.url, self._username, self._password, key_file, cert_file, verify_cert,
+                        set_active, client_id, profile)
         try:
             self._gis_id = self.gis.properties.id
         except AttributeError:
