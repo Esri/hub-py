@@ -135,6 +135,22 @@ class Site(OrderedDict):
         """
         return PageManager(self._gis, self)
 
+    def add_content(self, items_list):
+        """
+        Adds a batch of items to the site content library.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        items_list                Required list. A list of Item or item ids to add to the initiative
+        =====================     ====================================================================
+        """
+        #Fetch Initiative Collaboration group
+        _collab_group = self._gis.groups.get(self.collab_group_id)
+        #Fetch Content Group
+        _content_group = self._gis.groups.get(self.content_group_id)
+        #share items with groups
+        return self._gis.content.share_items(items_list, groups=[_collab_group, _content_group])
+
     def add_catalog_group(self, group_id):
         """
         ===============     ====================================================================
@@ -220,6 +236,36 @@ class Site(OrderedDict):
                 return self.item.delete()
             else:
                 return _delete_domain.content
+
+    def reassign_to(self, target_owner):
+        """
+        Allows the administrator to reassign the site object from one 
+        user to another. 
+        .. note::
+            This will transfer ownership of all items (site, content) and groups to the new target_owner.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        target_owner              Required string. The new desired owner of the site.
+        =====================     ====================================================================
+        """
+        #fetch the core team for this site
+        core_team = self._gis.groups.get(self.collab_group_id)
+        #fetch the contents shared with this team
+        core_team_content = core_team.content()
+        #remove items from core team 
+        self._gis.content.share_items(core_team_content, groups=[core_team])
+        #reassign to target_owner
+        for item in core_team_content:
+            item.reassign_to(target_owner)
+        #share item back to the content group
+        self._gis.content.share_items(core_team_content, groups=[core_team])
+        #fetch content team
+        content_team = self._gis.groups.get(self.content_group_id)
+        #reassign it to target_owner
+        content_team.reassign_to(target_owner)
+        return self._gis.content.get(self.itemid)
+
 
     def search(self, query=None, item_type=None):
         """ 

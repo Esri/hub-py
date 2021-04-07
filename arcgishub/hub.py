@@ -377,6 +377,22 @@ class Initiative(OrderedDict):
             followers.append(_temp)
         return followers
 
+    def add_content(self, items_list):
+        """
+        Adds a batch of items to the initiative content library.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        items_list                Required list. A list of Item or item ids to add to the initiative
+        =====================     ====================================================================
+        """
+        #Fetch Initiative Collaboration group
+        _collab_group = self._gis.groups.get(self.collab_group_id)
+        #Fetch Content Group
+        _content_group = self._gis.groups.get(self.content_group_id)
+        #share items with groups
+        return self._gis.content.share_items(items_list, groups=[_collab_group, _content_group])
+
     def delete(self):
         """
         Deletes the initiative and its site. 
@@ -404,14 +420,50 @@ class Initiative(OrderedDict):
             except:
                 pass
             #Disable delete protection on groups and site
-            _collab_group.protected = False
-            _content_group.protected = False
-            _followers_group.protected = False
+            try:
+                _collab_group.protected = False
+                _content_group.protected = False
+                _followers_group.protected = False
+            except:
+                pass
             #Delete groups, site and initiative
             _collab_group.delete()
             _content_group.delete()
             _followers_group.delete()
             return self.item.delete()
+
+    def reassign_to(self, target_owner):
+        """
+        Allows the administrator to reassign the initiative object from one 
+        user to another. 
+        .. note::
+            This will transfer ownership of all items (site, content) and groups that
+            belong to this initiative to the new target_owner.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        target_owner              Required string. The new desired owner of the initiative.
+        =====================     ====================================================================
+        """
+        #fetch the core team for this initiative
+        core_team = self._gis.groups.get(self.collab_group_id)
+        #fetch the contents shared with this team
+        core_team_content = core_team.content()
+        #remove items from core team 
+        self._gis.content.share_items(core_team_content, groups=[core_team])
+        #reassign to target_owner
+        for item in core_team_content:
+            item.reassign_to(target_owner)
+        #share item back to the content group
+        self._gis.content.share_items(core_team_content, groups=[core_team])
+        #fetch content and followers teams
+        content_team = self._gis.groups.get(self.content_group_id)
+        followers_team = self._gis.groups.get(self.followers_group_id)
+        #reassign them to target_owner
+        content_team.reassign_to(target_owner)
+        followers_team.reassign_to(target_owner)
+        return self._gis.content.get(self.itemid)
+
     
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
