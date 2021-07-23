@@ -445,23 +445,36 @@ class Initiative(OrderedDict):
         target_owner              Required string. The new desired owner of the initiative.
         =====================     ====================================================================
         """
+        ###check if admin user is performing this action
+        if 'admin' not in self._gis.users.me.role:
+            return Exception("You do not have the administrator privileges to perform this action.")
         #fetch the core team for this initiative
         core_team = self._gis.groups.get(self.collab_group_id)
         #fetch the contents shared with this team
         core_team_content = core_team.content()
+        #check if target_owner is part of core team, else add them to core team
+        members = core_team.get_members()
+        if target_owner not in members['admins'] or target_owner not in members['users']:
+            core_team.add_users(target_owner)
         #remove items from core team 
-        self._gis.content.share_items(core_team_content, groups=[core_team])
+        self._gis.content.unshare_items(core_team_content, groups=[core_team])
         #reassign to target_owner
         for item in core_team_content:
             item.reassign_to(target_owner)
+        #fetch the items again since they have been reassigned
+        new_content_list = []
+        for item in core_team_content:
+            item_temp = self._gis.content.get(item.id)
+            new_content_list.append(item_temp)
         #share item back to the content group
-        self._gis.content.share_items(core_team_content, groups=[core_team])
+        self._gis.content.share_items(new_content_list, groups=[core_team], allow_members_to_edit=True)
         #fetch content and followers teams
         content_team = self._gis.groups.get(self.content_group_id)
         followers_team = self._gis.groups.get(self.followers_group_id)
         #reassign them to target_owner
         content_team.reassign_to(target_owner)
         followers_team.reassign_to(target_owner)
+        core_team.reassign_to(target_owner)
         return self._gis.content.get(self.itemid)
 
     
@@ -547,8 +560,9 @@ class InitiativeManager(object):
 
         #Define initiative
         if description is None:
-            description = 'Create your own initiative to organize people around a shared goal.'
-        _item_dict = {"type":"Hub Initiative", "snippet":title + " Custom initiative", "typekeywords":"OpenData, Hub, hubInitiative", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{'schemaVersion':2}}
+            description = 'Create your own initiative by combining existing applications with a custom site.'
+        _snippet = "Create your own initiative by combining existing applications with a custom site. Use this initiative to form teams around a problem and invite your community to participate."
+        _item_dict = {"type":"Hub Initiative", "snippet":_snippet, "typekeywords":"Hub, hubInitiative, OpenData", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{}}
         
         #Defining content, collaboration and followers groups
         _content_group_title = title + ' Content'
