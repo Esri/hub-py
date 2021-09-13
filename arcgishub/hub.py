@@ -477,7 +477,53 @@ class Initiative(OrderedDict):
         core_team.reassign_to(target_owner)
         return self._gis.content.get(self.itemid)
 
-    
+    def share(self, everyone=False, org=False, groups=None, allow_members_to_edit=False):
+        """
+        Shares an initiative and associated site with the specified list of groups.
+        ======================  ========================================================
+        **Argument**            **Description**
+        ----------------------  --------------------------------------------------------
+        everyone                Optional boolean. Default is False, don't share with
+                                everyone.
+        ----------------------  --------------------------------------------------------
+        org                     Optional boolean. Default is False, don't share with
+                                the organization.
+        ----------------------  --------------------------------------------------------
+        groups                  Optional list of group ids as strings, or a list of
+                                arcgis.gis.Group objects, or a comma-separated list of
+                                group IDs.
+        ----------------------  --------------------------------------------------------
+        allow_members_to_edit   Optional boolean. Default is False, to allow item to be
+                                shared with groups that allow shared update
+        ======================  ========================================================
+        :return:
+            A dictionary with key "notSharedWith" containing array of groups with which the items could not be shared.
+        """
+        site = self._hub.sites.get(self.site_id)
+        result1 = site.item.share(everyone=everyone, org=org, groups=groups, allow_members_to_edit=allow_members_to_edit)
+        result2 = self.item.share(everyone=everyone, org=org, groups=groups, allow_members_to_edit=allow_members_to_edit)
+        print(result1)
+        return result2
+
+    def unshare(self, groups):
+        """
+        Stops sharing of the initiative and its associated site with the specified list of groups.
+        ================  =========================================================================================
+        **Argument**      **Description**
+        ----------------  -----------------------------------------------------------------------------------------
+        groups            Optional list of group names as strings, or a list of arcgis.gis.Group objects,
+                          or a comma-separated list of group IDs.
+        ================  =========================================================================================
+        :return:
+            Dictionary with key "notUnsharedFrom" containing array of groups from which the items could not be unshared.
+        """
+        site = self._hub.sites.get(self.site_id)
+        result1 = site.item.unshare(groups=groups)
+        result2 = self.item.unshare(groups=groups)
+        print(result1)
+        return result2
+
+
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
         .. note::
