@@ -28,7 +28,7 @@ class Site(OrderedDict):
     web accessible content.
     """
     
-    def __init__(self, gis, siteItem, sections=None):
+    def __init__(self, gis, siteItem):
         """
         Constructs an empty Site object
         """
@@ -882,6 +882,13 @@ class Page(OrderedDict):
     @description.setter
     def description(self, value):
         self.item.description = value
+
+    @property
+    def layout(self):
+        """
+        Return layout of a page
+        """
+        return InsensitiveDict(self.definition['values']['layout'])
         
     @property
     def owner(self):
@@ -940,6 +947,26 @@ class Page(OrderedDict):
             for key, value in page_properties.items():
                 _page_data[key] = value
             return self.item.update(_page_data, data, thumbnail, metadata)
+
+    def update_layout(self, layout):
+        """ Updates the layout of the page.
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        layout                    Required dictionary. The new layout dictionary to update to the page.
+        =====================     ====================================================================
+        :return:
+           A boolean indicating success (True) or failure (False).
+        .. code-block:: python
+            USAGE EXAMPLE: Update a site successfully
+            page1 = myHub.pages.get('itemId12345')
+            page_layout = page1.layout
+            page_layout.sections[0].rows[0].cards.pop(0)
+            page1.update_layout(layout = page_layout)
+            >> True
+        """
+        self.definition['values']['layout'] = layout._json()
+        return self.item.update(item_properties={'text': self.definition})
  
     def delete(self):
         """
