@@ -2,6 +2,8 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
+from arcgishub import discussions
+from arcgishub.discussions import ChannelManager, PostManager
 from arcgishub.sites import SiteManager, PageManager
 from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
@@ -201,6 +203,15 @@ class Hub(object):
         The resource manager for Hub pages. See :class:`~hub.sites.PageManager`.
         """
         return PageManager(self.gis)
+
+    @_lazy_property
+    def discussions(self):
+        discussions.posts = PostManager(self)
+        discussions.channels = ChannelManager(self)
+        """
+        The resource manager for Hub Discussions.
+        """
+        return discussions
 
 class Initiative(OrderedDict):
     """
