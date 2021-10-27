@@ -942,11 +942,27 @@ class Page(OrderedDict):
             page1.update(page_properties={'description':'Description for page.'})
             >> True
         """
+        _page_data = self.definition
         if page_properties:
-            _page_data = self.definition
             for key, value in page_properties.items():
                 _page_data[key] = value
-            return self.item.update(_page_data, data, thumbnail, metadata)
+        if slug:
+            #Fetch all the sites this page is connected to
+            linked_sites = self.definition['values']['sites']
+            for item in linked_sites:
+                #Update the title and slug on the parent sites
+                site_item = self._gis.content.get(item['id'])
+                site = Site(self._gis, site_item)
+                site.definition['values']['pages'] = [p for p in site.definition['values']['pages'] if p['id']!=self.itemid]
+                _renamed_page = {}
+                _renamed_page['id'] = self.itemid
+                _renamed_page['title'] = slug
+                _renamed_page['slug'] = slug
+                site.definition['values']['pages'].append(_renamed_page)
+                site.item.update(item_properties={'text': site.definition})
+            #Update the slug on the page
+            _page_data['title'] = slug
+        return self.item.update(_page_data, data, thumbnail, metadata)
 
     def update_layout(self, layout):
         """ Updates the layout of the page.
