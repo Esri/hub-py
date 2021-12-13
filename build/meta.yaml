@@ -5,9 +5,9 @@
 
 package:
     name: arcgishub
-    version: '1.0.0'
+    version: '3.0.0'
 source:
-    path: D:/Projects/hub-py/src
+    path: ../../src
 build:
     number: '1'
 requirements:
@@ -18,9 +18,6 @@ requirements:
     run:
         - python
         - six
-#test:
-    #imports:
-     #   - arcgis.gis
 about:
     #home: https://developers.arcgis.com/python
     license: Esri Master License Agreement (MLA)
