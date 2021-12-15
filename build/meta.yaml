@@ -1,24 +1,25 @@
-# This file created by conda-build 2.0.1
-# meta.yaml template originally from:
-# e:\share\conda-project\conda-packages\arcgis-api
-# ------------------------------------------------
-
-package:
-    name: arcgishub
-    version: '3.0.0'
-source:
-    path: ../../src
-build:
-    number: '1'
-requirements:
-    build:
-        - python
-        - setuptools
-        - six
-    run:
-        - python
-        - six
+---
 about:
-    #home: https://developers.arcgis.com/python
-    license: Esri Master License Agreement (MLA)
-    summary: ArcGIS Hub Python API
+  home: https://developers.arcgis.com/python
+  license: Esri Master License Agreement (MLA)
+  summary: ArcGIS Hub for Python
+build:
+  number: '1'
+package:
+  name: arcgishub
+  version: 3.0.0
+requirements:
+  build:
+  - python
+  - setuptools
+  - six
+  - arcgis>=1.9.0
+  run:
+  - python
+  - six
+  - arcgis
+source:
+  path: C:/SVN/hub-py/src
+test:
+  imports:
+  - arcgis.apps.hub
