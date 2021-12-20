@@ -2,7 +2,7 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
-from arcgishub import discussions
+from arcgis.apps.hub import discussions
 from arcgis.apps.hub.discussions import ChannelManager, PostManager
 from arcgis.apps.hub.sites import SiteManager, PageManager
 from arcgis.features.enrich_data import enrich_layer
