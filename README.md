@@ -11,7 +11,7 @@ In order to install Python, install the bundle that comes with the Anaconda dist
 
 Execute the following command in the terminal
 
-``` pip install -e git+https://github.com/esri/hub-py.git#egg=arcgishub ```
+``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
