@@ -367,6 +367,13 @@ class Site(OrderedDict):
             site1.update_layout(layout = site_layout)
             >> True
         """
+        #Deleting the draft file for this site, if exists
+        resources = self.item.resources.list()
+        for resource in resources:
+            if 'draft-' in resource['resource']:
+                path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
+                self.item.resources.remove(file=path)
+        #Update the data of the site
         self.definition['values']['layout'] = layout._json()
         return self.item.update(item_properties={'text': self.definition})
 
@@ -981,8 +988,8 @@ class Page(OrderedDict):
             page1.update_layout(layout = page_layout)
             >> True
         """
-        self.definition['values']['layout'] = layout._json()
-        return self.item.update(item_properties={'text': self.definition})
+        #Calling the update layout method for site with this page object
+        Site.update_layout(self, layout)
  
     def delete(self):
         """
