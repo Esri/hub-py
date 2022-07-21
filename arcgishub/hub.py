@@ -2,9 +2,9 @@ from arcgis.gis import GIS
 from arcgis.features import FeatureLayer
 from arcgis.geocoding import geocode
 from arcgis._impl.common._mixins import PropertyMap
+from arcgishub.sites import SiteManager, Site, PageManager
 from arcgishub import discussions
 from arcgishub.discussions import ChannelManager, PostManager
-from arcgishub.sites import SiteManager, PageManager
 from arcgis.features.enrich_data import enrich_layer
 from datetime import datetime
 from collections import OrderedDict
@@ -94,7 +94,7 @@ class Hub(object):
         Returns True if Hub is enabled on this org
         """
         try:
-            self.gis.properties.subscriptionInfo.hubSettings.enabled
+            self.gis.properties.portalProperties["hub"]["enabled"]
             return True
         except:
             return False
@@ -188,7 +188,10 @@ class Hub(object):
         """
         The resource manager for Hub events. See :class:`~arcgis.apps.hub.EventManager`.
         """
-        return EventManager(self)
+        if self._hub_enabled:
+            return EventManager(self)
+        else:
+            raise Exception("Events is only available with Hub Premium. Please upgrade to Hub Premium to use this feature.")
     
     @_lazy_property
     def sites(self):
@@ -206,11 +209,11 @@ class Hub(object):
 
     @_lazy_property
     def discussions(self):
-        discussions.posts = PostManager(self)
-        discussions.channels = ChannelManager(self)
         """
         The resource manager for Hub Discussions.
         """
+        discussions.posts = PostManager(self)
+        discussions.channels = ChannelManager(self)
         return discussions
 
 class Initiative(OrderedDict):
@@ -226,8 +229,6 @@ class Initiative(OrderedDict):
         self.item = initiativeItem
         self._hub = hub
         self._gis = self._hub.gis
-        #self._gis = gis
-        #self._hub = gis.hub
         try:
             self._initiativedict = self.item.get_data()
             pmap = PropertyMap(self._initiativedict)
@@ -255,13 +256,9 @@ class Initiative(OrderedDict):
     @property
     def description(self):
         """
-        Getter/Setter for the initiative description
+        Returns the initiative description
         """
         return self.item.description
-    
-    @description.setter
-    def description(self, value):
-        self.item.description = value
     
     @property
     def snippet(self):
@@ -289,11 +286,14 @@ class Initiative(OrderedDict):
         return self.item.tags
     
     @property
-    def initiative_url(self):
+    def url(self):
         """
-        Returns the url of the initiative editor
+        Returns the url of the initiative site
         """
-        return self.item.properties['url']
+        try:
+            return self.item.properties["url"]
+        except:
+            return self.item.url
 
     @property 
     def site_id(self):
@@ -310,7 +310,10 @@ class Initiative(OrderedDict):
         """
         Getter/Setter for the url of the initiative site
         """
-        return self.sites.get(self.site_id).url
+        try:
+            return self.item.url
+        except:
+            return self.sites.get(self.site_id).url
 
     @site_url.setter
     def site_url(self, value):
@@ -326,9 +329,16 @@ class Initiative(OrderedDict):
     @property
     def collab_group_id(self):
         """
-        Returns the groupId for the collaboration group
+        Getter/Setter for the groupId for the collaboration group
         """
-        return self.item.properties['collaborationGroupId']
+        try:
+            return self.item.properties['collaborationGroupId']
+        except:
+            return None
+
+    @collab_group_id.setter
+    def collab_group_id(self, value):
+        self.item.properties['collaborationGroupId'] = value
 
     @property
     def followers_group_id(self):
@@ -391,6 +401,7 @@ class Initiative(OrderedDict):
     def add_content(self, items_list):
         """
         Adds a batch of items to the initiative content library.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -408,89 +419,130 @@ class Initiative(OrderedDict):
         """
         Deletes the initiative and its site. 
         If unable to delete, raises a RuntimeException.
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Delete an initiative successfully
+            
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.delete()
+            
             >> True
         """
         if self.item is not None:
-            #Fetch Initiative Collaboration group
-            _collab_group = self._gis.groups.get(self.collab_group_id)
+            #Fetch initiative site
+            _site = self._hub.sites.get(self.site_id)
+            Site.delete(_site)
+            #Fetch and delete Initiative Collaboration group if exists
+            try:
+                _collab_group = self._gis.groups.get(self.collab_group_id)
+                _collab_group.protected = False
+                _collab_group.delete()
+            except:
+                pass
             #Fetch Content Group
             _content_group = self._gis.groups.get(self.content_group_id)
-            #Fetch Followers Group
-            _followers_group = self._gis.groups.get(self.followers_group_id)
-            #Fetch initiative site
+            #Fetch Followers Group for Hub Premium initiatives
+            if self._hub._hub_enabled:
+                _followers_group = self._gis.groups.get(self.followers_group_id)
+            #Disable delete protection on groups
             try:
-                _site = self._hub.sites.get(self.site_id)
-                _site.protected = False
-                _site.delete()
-            except:
-                pass
-            #Disable delete protection on groups and site
-            try:
-                _collab_group.protected = False
                 _content_group.protected = False
                 _followers_group.protected = False
+                _followers_group.delete()
             except:
                 pass
-            #Delete groups, site and initiative
-            _collab_group.delete()
+            #Delete groups and initiative
             _content_group.delete()
-            _followers_group.delete()
             return self.item.delete()
 
     def reassign_to(self, target_owner):
         """
+        
         Allows the administrator to reassign the initiative object from one 
         user to another. 
+        
         .. note::
             This will transfer ownership of all items (site, content) and groups that
             belong to this initiative to the new target_owner.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
         target_owner              Required string. The new desired owner of the initiative.
         =====================     ====================================================================
         """
-        ###check if admin user is performing this action
+        #check if admin user is performing this action
         if 'admin' not in self._gis.users.me.role:
             return Exception("You do not have the administrator privileges to perform this action.")
-        #fetch the core team for this initiative
-        core_team = self._gis.groups.get(self.collab_group_id)
-        #fetch the contents shared with this team
-        core_team_content = core_team.content()
-        #check if target_owner is part of core team, else add them to core team
-        members = core_team.get_members()
-        if target_owner not in members['admins'] or target_owner not in members['users']:
-            core_team.add_users(target_owner)
-        #remove items from core team 
-        self._gis.content.unshare_items(core_team_content, groups=[core_team])
-        #reassign to target_owner
-        for item in core_team_content:
-            item.reassign_to(target_owner)
-        #fetch the items again since they have been reassigned
-        new_content_list = []
-        for item in core_team_content:
-            item_temp = self._gis.content.get(item.id)
-            new_content_list.append(item_temp)
-        #share item back to the content group
-        self._gis.content.share_items(new_content_list, groups=[core_team], allow_members_to_edit=True)
-        #fetch content and followers teams
+        #check if core team is needed by checking the role of the target_owner
+        if self._gis.users.get(target_owner).role=='org_admin':
+            #check if the initiative comes with core team by checking owner's role
+            if self._gis.users.get(self.owner).role=='org_admin':
+                #fetch the core team for the initative 
+                core_team = self._gis.groups.get(self.collab_group_id)
+                #fetch the contents shared with this team
+                core_team_content = core_team.content()
+                #check if target_owner is part of core team, else add them to core team
+                members = core_team.get_members()
+                if target_owner not in members['admins'] or target_owner not in members['users']:
+                    core_team.add_users(target_owner)
+                #remove items from core team 
+                self._gis.content.unshare_items(core_team_content, groups=[core_team])
+                #reassign to target_owner
+                for item in core_team_content:
+                    item.reassign_to(target_owner)
+                #fetch the items again since they have been reassigned
+                new_content_list = []
+                for item in core_team_content:
+                    item_temp = self._gis.content.get(item.id)
+                    new_content_list.append(item_temp)
+                #share item back to the content group
+                self._gis.content.share_items(new_content_list, groups=[core_team], allow_members_to_edit=True)
+                #reassign core team to target owner
+                core_team.reassign_to(target_owner)
+            else:
+                #create core team necessary for the initiative
+                _collab_group_title = title + ' Core Team'
+                _collab_group_dict = {
+                    "title": _collab_group_title, 
+                    "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "access":"org",
+                    "capabilities":"updateitemcontrol",
+                    "membershipAccess": "collaboration",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+                }
+                collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+                collab_group.protected = True
+                self.collab_group_id = collab_group.id
+        else:
+            #reassign the initiative, site, page items
+            self.item.reassign_to(target_owner)
+            site = self._hub.sites.get(self.site_id)
+            site.item.reassign_to(target_owner)
+            site_pages = site.pages.search()
+            #If pages exist
+            if len(site_pages) > 0:
+                for page in site_pages:
+                    #Unlink page (deletes if)
+                    page.item.reassign_to(target_owner)
+        #fetch content group
         content_team = self._gis.groups.get(self.content_group_id)
-        followers_team = self._gis.groups.get(self.followers_group_id)
-        #reassign them to target_owner
+        #reassign to target_owner
         content_team.reassign_to(target_owner)
-        followers_team.reassign_to(target_owner)
-        core_team.reassign_to(target_owner)
+        #If it is a Hub Premium initiative, repeat for followers group
+        if self._hub._hub_enabled:
+            followers_team = self._gis.groups.get(self.followers_group_id)
+            followers_team.reassign_to(target_owner)
         return self._gis.content.get(self.itemid)
 
     def share(self, everyone=False, org=False, groups=None, allow_members_to_edit=False):
         """
         Shares an initiative and associated site with the specified list of groups.
+        
         ======================  ========================================================
         **Argument**            **Description**
         ----------------------  --------------------------------------------------------
@@ -507,6 +559,7 @@ class Initiative(OrderedDict):
         allow_members_to_edit   Optional boolean. Default is False, to allow item to be
                                 shared with groups that allow shared update
         ======================  ========================================================
+        
         :return:
             A dictionary with key "notSharedWith" containing array of groups with which the items could not be shared.
         """
@@ -519,12 +572,14 @@ class Initiative(OrderedDict):
     def unshare(self, groups):
         """
         Stops sharing of the initiative and its associated site with the specified list of groups.
+        
         ================  =========================================================================================
         **Argument**      **Description**
         ----------------  -----------------------------------------------------------------------------------------
         groups            Optional list of group names as strings, or a list of arcgis.gis.Group objects,
                           or a comma-separated list of group IDs.
         ================  =========================================================================================
+        
         :return:
             Dictionary with key "notUnsharedFrom" containing array of groups from which the items could not be unshared.
         """
@@ -537,10 +592,14 @@ class Initiative(OrderedDict):
 
     def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the initiative.
+
+
         .. note::
             For initiative_properties, pass in arguments for only the properties you want to be updated.
             All other properties will be untouched.  For example, if you want to update only the
             initiative's description, then only provide the description argument in initiative_properties.
+        
+
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -552,14 +611,20 @@ class Initiative(OrderedDict):
         ---------------------     --------------------------------------------------------------------
         metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
+        
         To find the list of applicable options for argument initiative_properties - 
         https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
+        
         :return:
            A boolean indicating success (True) or failure (False).
+
         .. code-block:: python
+
             USAGE EXAMPLE: Update an initiative successfully
+
             initiative1 = myHub.initiatives.get('itemId12345')
             initiative1.update(initiative_properties={'description':'Create your own initiative to organize people around a shared goal.'})
+            
             >> True
         """
         if initiative_properties:
@@ -569,15 +634,21 @@ class Initiative(OrderedDict):
                 if key=='title':
                     title = value
                     #Fetch Initiative Collaboration group
-                    _collab_group = self._gis.groups.get(self.collab_group_id)
+                    try:
+                        _collab_group = self._gis.groups.get(self.collab_group_id)
+                        _collab_group.update(title=title+' Core Team')
+                    except:
+                        pass
+                    #Fetch Followers Group
+                    try:
+                        _followers_group = self._gis.groups.get(self.followers_group_id)
+                        _followers_group.update(title=title+' Followers')
+                    except:
+                        pass
                     #Fetch Content Group
                     _content_group = self._gis.groups.get(self.content_group_id)
-                    #Fetch Followers Group
-                    _followers_group = self._gis.groups.get(self.followers_group_id)
-                    #Update title for all groups
-                    _collab_group.update(title=title+' Core Team')
+                    #Update title for group
                     _content_group.update(title=title+' Content')
-                    _followers_group.update(title=title+' Followers')
             return self.item.update(_initiative_data, data, thumbnail, metadata)
     
 class InitiativeManager(object):
@@ -607,52 +678,88 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         thumbnail           Optional string. Either a path or URL to a thumbnail image.
         ===============     ====================================================================
+        
         :return:
            The initiative if successfully added, None if unsuccessful.
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Add an initiative successfully
+            
             initiative1 = myHub.initiatives.add(title='Vision Zero Analysis')
             initiative1.item
         """
 
         #Define initiative
         if description is None:
-            description = 'Create your own initiative by combining existing applications with a custom site.'
-        _snippet = "Create your own initiative by combining existing applications with a custom site. Use this initiative to form teams around a problem and invite your community to participate."
-        _item_dict = {"type":"Hub Initiative", "snippet":_snippet, "typekeywords":"Hub, hubInitiative, OpenData", "title":title, "description": description, "licenseInfo": "CC-BY-SA","culture": "{{culture}}", "properties":{}}
+            description = (
+                "Create your own initiative by combining existing applications with a custom site."
+            )
+        _snippet = (
+            "Create your own initiative by combining existing applications with a custom site. Use this initiative to form teams around a problem and invite your community to participate."
+        )
+        _item_dict = {
+            "type":"Hub Initiative", 
+            "snippet":_snippet, 
+            "typekeywords":"Hub, hubInitiative, OpenData", 
+            "title":title, 
+            "description": description, 
+            "licenseInfo": "CC-BY-SA",
+            "culture": "{{culture}}", 
+            "properties":{}
+        }
         
         #Defining content, collaboration and followers groups
         _content_group_title = title + ' Content'
-        _content_group_dict = {"title": _content_group_title, "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
+        _content_group_dict = {
+            "title": _content_group_title, 
+            "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], 
+            "access":"public"
+        }
         _collab_group_title = title + ' Core Team'
-        _collab_group_dict = {"title": _collab_group_title, "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
+        _collab_group_dict = {
+            "title": _collab_group_title, 
+            "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+            "access":"org",
+            "capabilities":"updateitemcontrol",
+            "membershipAccess": "collaboration",
+            "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+        }
         _followers_group_title = title + ' Followers'
-        _followers_group_dict = {"title": _followers_group_title, "tags": ["Hub Initiative Group", " Hub Initiative Followers Group", "Hub Initiative Group"], "access":"public"}
+        _followers_group_dict = {
+            "title": _followers_group_title, 
+            "tags": ["Hub Group", "Hub Initiative Group", " Hub Initiative Followers Group"], 
+            "access":"public"
+        }
         
         #Create groups
         content_group =  self._gis.groups.create_from_dict(_content_group_dict)
-        collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
-        followers_group = self._gis.groups.create_from_dict(_followers_group_dict)
-        
         #Protect groups from accidental deletion
         content_group.protected = True
-        collab_group.protected = True
-        followers_group.protected = True
-        
         #Adding it to _item_dict
-        if content_group is not None and collab_group is not None and followers_group is not None:
+        _item_dict['properties']['contentGroupId'] = content_group.id
+        if self._gis.users.me.role=='org_admin':
+            collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+            collab_group.protected = True
             _item_dict['properties']['collaborationGroupId'] = collab_group.id
-            _item_dict['properties']['contentGroupId'] = content_group.id
+        if self._hub._hub_enabled:
+            followers_group = self._gis.groups.create_from_dict(_followers_group_dict)
+            followers_group.protected = True
             _item_dict['properties']['followersGroupId'] = followers_group.id
-        
+               
         #Create initiative and share it with collaboration group
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
-        item.share(groups=[collab_group])
+        try:
+            item.share(groups=[collab_group])
+        except:
+            pass
 
         #Create initiative site and set initiative properties
         _initiative = Initiative(self._hub, item)
+        #If it is a brand new initiative, create new site
         if site is None:
             site = _initiative.sites.add(title=title)
+        #else clone existing site
         else:
             site = _initiative.sites.clone(site, pages=True, title=title)
         item.update(item_properties={'url': site.url, 'culture': self._gis.properties.user.culture})
@@ -669,6 +776,10 @@ class InitiativeManager(object):
         """
         Clone allows for the creation of an initiative that is derived from the current initiative.
 
+        .. note:: 
+            If both your `origin_hub` and `destination_hub` are Hub Basic organizations, please use the 
+            `clone` method supported under the `~arcgis.apps.sites.SiteManager` class.
+
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -679,14 +790,40 @@ class InitiativeManager(object):
         ---------------     --------------------------------------------------------------------
         title               Optional String.
         ===============     ====================================================================
+        
         :return:
            Initiative.
+
+        .. code-block:: python
+            
+            USAGE EXAMPLE: Clone an initiative in another organization
+
+            #Connect to Hub
+            hub_origin = gis1.hub
+            hub_destination = gis2.hub
+            #Fetch initiative
+            initiative1 = hub_origin.initiatives.get('itemid12345')
+            #Clone in another Hub
+            initiative_cloned = hub_destination.initiatives.clone(initiative1, origin_hub=hub_origin)
+            initiative_cloned.item
+
+
+            USAGE EXAMPLE: Clone initiative in the same organization
+
+            myhub = gis.hub
+            initiative1 = myhub.initiatives.get('itemid12345')
+            initiative2 = myhub.initiatives.clone(initiative1, title='New Initiative')
+
         """
         from datetime import timezone
         now = datetime.now(timezone.utc)
         #Checking if item of correct type has been passed 
         if 'hubInitiative' not in initiative.item.typeKeywords:
             raise Exception("Incorrect item type. Initiative item needed for cloning.")
+        #Checking if initiative or site needs to be cloned
+        if self._hub and origin_hub:
+            if not self._hub._hub_enabled and not origin_hub._hub_enabled:
+                raise Exception("For Hub Basic organizations, please clone the site instead of initiative.")
         #New title
         if title is None:
             title = initiative.title + "-copy-%s" % int(now.timestamp() * 1000)
@@ -724,7 +861,7 @@ class InitiativeManager(object):
             initiative1.item
         """
         initiativeItem =    self._gis.content.get(initiative_id)
-        if 'hubInitiative' in initiativeItem.typeKeywords:
+        if "hubInitiative" in initiativeItem.typeKeywords:
             return Initiative(self._hub, initiativeItem)
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
@@ -1300,7 +1437,11 @@ class Event(OrderedDict):
         self.definition = pmap
             
     def __repr__(self):
-        return '<%s title:"%s" venue:%s>' % (type(self).__name__, self.title, self.venue)
+        return '<%s title:"%s" venue:%s>' % (
+            type(self).__name__, 
+            self.title, 
+            self.venue
+        )
     
     @property 
     def event_id(self):
@@ -1336,13 +1477,6 @@ class Event(OrderedDict):
         Returns the initiative id of the initiative the event belongs to
         """
         return self._eventdict['initiativeId'] 
-    
-    @property
-    def site_id(self):
-        """
-        Returns the site id of the initiative site
-        """
-        return self._eventdict['siteId']
     
     @property
     def organizers(self):
@@ -1426,12 +1560,17 @@ class Event(OrderedDict):
         Allows for adding an image to an event.
         Event should be of type jpeg, jpg or png.
         Max size is 10MB.
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Add image to existing event
+        
             event1 = myhub.events.get(24)
             event1.add_attachment(image_url)
+        
             >> True
         """
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(self.event_id)+'/addAttachment'
@@ -1441,31 +1580,41 @@ class Event(OrderedDict):
     def delete(self):
         """
         Deletes an event
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Delete an event successfully
+        
             event1 = myhub.events.get(24)
             event1.delete()
+        
             >> True
         """
         _group = self._gis.groups.get(self.group_id)
         _group.protected = False
         _group.delete()
-        params = {'f': 'json', 'objectIds': self.event_id}
+        params = {'f': 'json', 'objectIds': self.event_id, 'token': self._gis._con.token}
         delete_event = self._gis._con.post(path='https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/deleteFeatures', postdata=params)
         return delete_event['deleteResults'][0]['success']
         
     def update(self, event_properties):
         """
         Updates properties of an event
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Update an event successfully
+        
             event1 = myhub.events.get(id)
             event_properties = {'status': 'planned', description: 'Test'}
             event1.update(event_properties)
+        
             >> True
         """
         _feature = {}
@@ -1480,7 +1629,11 @@ class Event(OrderedDict):
 
         #Update event
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/updateFeatures'
-        params = {'f': 'json', 'features': event_data}
+        params = {
+            'f': 'json', 
+            'features': event_data,
+            'token': self._gis._con.token
+        }
         update_event = self._gis._con.post(path=url, postdata=params)
         return update_event['updateResults'][0]['success']
 
@@ -1502,7 +1655,12 @@ class EventManager(object):
         """
         events = []
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query'
-        params = {'f' :'json', 'outFields': '*', 'where': '1=1'}
+        params = {
+            'f' :'json', 
+            'outFields': '*', 
+            'where': '1=1',
+            'token': self._gis._con.token
+        }
         all_events = self._gis._con.get(url, params)
         _events_data = all_events['features']
         for event in _events_data:
@@ -1560,7 +1718,9 @@ class EventManager(object):
             Event if successfully added.
 
         .. code-block:: python
+            
             USAGE EXAMPLE: Add an event successfully
+            
             event_properties = {
                 'title':'Test Event',
                 'description': 'Testing with python',
@@ -1572,6 +1732,7 @@ class EventManager(object):
                 'endDate': 1562889600,
                 'isAllDay': 1
             }
+            
             new_event = myhub.events.add(event_properties)
         """
         _feature = {}
@@ -1582,7 +1743,13 @@ class EventManager(object):
         try:
             event_properties['organizers']
         except:
-            _organizers_list = [{"name":self._gis.users.me.fullName, "contact": self._gis.users.me.email, "username": self._gis.users.me.username}]
+            _organizers_list = [
+                {
+                    "name":self._gis.users.me.fullName, 
+                    "contact": self._gis.users.me.email, 
+                    "username": self._gis.users.me.username
+                }
+            ]
             _organizers = json.dumps(_organizers_list)
             event_properties['organizers'] = _organizers
         #Set sponsors if not provided
@@ -1614,7 +1781,11 @@ class EventManager(object):
         event_id = max([event.event_id for event in self._all_events()]) + 1
         
         #Create event group
-        _event_group_dict = {'title': event_properties['title'], 'access': 'public', 'tags': ["Hub Event Group", "Open Data", "hubEvent|"+str(event_id)]}
+        _event_group_dict = {
+            'title': event_properties['title'], 
+            'access': 'public', 
+            'tags': ["Hub Event Group", "Open Data", "hubEvent|"+str(event_id)]
+        }
         _event_group = self._gis.groups.create_from_dict(_event_group_dict)
         _event_group.protected = True
         event_properties['groupId'] = _event_group.id
@@ -1624,7 +1795,11 @@ class EventManager(object):
         _feature["geometry"] = geometry
         event_data = [_feature]
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/addFeatures'
-        params = {'f': 'json', 'features': event_data}
+        params = {
+            'f': 'json', 
+            'features': event_data,
+            'token': self._gis._con.token
+        }
         add_event = self._gis._con.post(path=url, postdata=params)
         try:
             add_event['addResults']
@@ -1635,6 +1810,7 @@ class EventManager(object):
     def search(self, initiative_id=None, title=None, venue=None, organizer_name=None):
         """ 
         Searches for events within a Hub.
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -1646,8 +1822,10 @@ class EventManager(object):
         ---------------     --------------------------------------------------------------------
         organizer_name      Optional string. Name of the organizer of the event.
         ===============     ====================================================================
+        
         :return:
            A list of matching indicators.
+        
         """
         events = []
         events = self._all_events()
@@ -1664,16 +1842,19 @@ class EventManager(object):
 
     def get(self, event_id):
         """ Get the event for the specified event_id.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         event_id                   Required integer. The event identifier.
         =======================    =============================================================
+        
         :return:
             The event object.
+        
         """
         url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)
-        params = {'f':'json'}
+        params = {'f':'json', 'token':self._gis._con.token}
         feature = self._gis._con.get(url, params)
         return Event(self._gis, feature['feature'])
 
