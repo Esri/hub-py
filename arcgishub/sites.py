@@ -41,7 +41,11 @@ class Site(OrderedDict):
             self.definition = None
             
     def __repr__(self):
-        return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.title, self.owner)
+        return '<%s title:"%s" owner:%s>' % (
+            type(self).__name__, 
+            self.title, 
+            self.owner
+        )
 
     @property
     def itemid(self):
@@ -127,6 +131,13 @@ class Site(OrderedDict):
         """
         return InsensitiveDict(self.definition['values']['layout'])
 
+    @property
+    def theme(self):
+        """
+        Return theme of a site
+        """
+        return InsensitiveDict(self.definition['values']['theme'])
+
     @_lazy_property
     def pages(self):
         """
@@ -138,6 +149,7 @@ class Site(OrderedDict):
     def add_content(self, items_list):
         """
         Adds a batch of items to the site content library.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -153,6 +165,7 @@ class Site(OrderedDict):
 
     def add_catalog_group(self, group_id):
         """
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -166,6 +179,7 @@ class Site(OrderedDict):
 
     def delete_catalog_group(self, group_id):
         """
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -181,12 +195,17 @@ class Site(OrderedDict):
     def delete(self):
         """
         Deletes the site. If unable to delete, raises a RuntimeException.
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Delete a site successfully
+            
             site1 = myHub.sites.get('itemId12345')
             site1.delete()
+            
             >> True
         """
         #Unlink site from pages. Delete page if not linked to other sites
@@ -223,12 +242,20 @@ class Site(OrderedDict):
             #Disable delete protection on site
             self.item.protect(enable=False)
             #Fetch siteId from domain entry
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
+            _HEADERS = {
+                'Content-Type': 'application/json', 
+                'Authorization': self._gis._con.token, 
+                'Referer': self._gis._con._referer
+            }
             path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
             _site_domain = requests.get(path, headers = _HEADERS)
             _siteId = _site_domain.json()[0]['id']
             #Delete domain entry
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
+            _HEADERS = {
+                'Content-Type': 'application/json', 
+                'Authorization': self._gis._con.token, 
+                'Referer': self._gis._con._referer
+            }
             path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
             _delete_domain = requests.delete(path, headers = _HEADERS)
             if _delete_domain.status_code==200:
@@ -241,48 +268,79 @@ class Site(OrderedDict):
         """
         Allows the administrator to reassign the site object from one 
         user to another. 
+        
         .. note::
             This will transfer ownership of all items (site, content) and groups to the new target_owner.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
         target_owner              Required string. The new desired owner of the site.
         =====================     ====================================================================
         """
-        ###check if admin user is performing this action
+        #check if admin user is performing this action
         if 'admin' not in self._gis.users.me.role:
             return Exception("You do not have the administrator privileges to perform this action.")
-        #fetch the core team for this initiative
-        core_team = self._gis.groups.get(self.collab_group_id)
-        #fetch the contents shared with this team
-        core_team_content = core_team.content()
-        #check if target_owner is part of core team, else add them to core team
-        members = core_team.get_members()
-        if target_owner not in members['admins'] or target_owner not in members['users']:
-            core_team.add_users(target_owner)
-        #remove items from core team 
-        self._gis.content.unshare_items(core_team_content, groups=[core_team])
-        #reassign to target_owner
-        for item in core_team_content:
-            item.reassign_to(target_owner)
-        #fetch the items again since they have been reassigned
-        new_content_list = []
-        for item in core_team_content:
-            item_temp = self._gis.content.get(item.id)
-            new_content_list.append(item_temp)
-        #share item back to the content group
-        self._gis.content.share_items(new_content_list, groups=[core_team], allow_members_to_edit=True)
-        #fetch content team
+        #check if core team is needed by checking the role of the target_owner
+        if self._gis.users.get(target_owner).role=='org_admin':
+            #check if the initiative comes with core team by checking owner's role
+            if self._gis.users.get(self.owner).role=='org_admin':
+                #fetch the core team for the initative 
+                core_team = self._gis.groups.get(self.collab_group_id)
+                #fetch the contents shared with this team
+                core_team_content = core_team.content()
+                #check if target_owner is part of core team, else add them to core team
+                members = core_team.get_members()
+                if target_owner not in members['admins'] or target_owner not in members['users']:
+                    core_team.add_users(target_owner)
+                #remove items from core team 
+                self._gis.content.unshare_items(core_team_content, groups=[core_team])
+                #reassign to target_owner
+                for item in core_team_content:
+                    item.reassign_to(target_owner)
+                #fetch the items again since they have been reassigned
+                new_content_list = []
+                for item in core_team_content:
+                    item_temp = self._gis.content.get(item.id)
+                    new_content_list.append(item_temp)
+                #share item back to the content group
+                self._gis.content.share_items(new_content_list, groups=[core_team], allow_members_to_edit=True)
+                #reassign core team to target owner
+                core_team.reassign_to(target_owner)
+            else:
+                #create core team necessary for the initiative
+                _collab_group_title = title + ' Core Team'
+                _collab_group_dict = {
+                    "title": _collab_group_title, 
+                    "tags": ["Hub Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "access":"org",
+                    "capabilities":"updateitemcontrol",
+                    "membershipAccess": "collaboration",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+                }
+                collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+                collab_group.protected = True
+                self.collab_group_id = collab_group.id
+        else:
+            #just reassign the initiative and site items
+            self.item.reassign_to(target_owner)
+            site_pages = self.pages.search()
+            #If pages exist
+            if len(site_pages) > 0:
+                for page in site_pages:
+                    #Unlink page (deletes if)
+                    page.item.reassign_to(target_owner) 
+        #fetch content group
         content_team = self._gis.groups.get(self.content_group_id)
-        #reassign them to target_owner
+        #reassign to target_owner
         content_team.reassign_to(target_owner)
-        core_team.reassign_to(target_owner)
         return self._gis.content.get(self.itemid)
 
 
     def search(self, query=None, item_type=None):
         """ 
         Search and filter content for a site. 
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -290,14 +348,19 @@ class Site(OrderedDict):
         ---------------------     --------------------------------------------------------------------
         item_type                 Optional list. Returns items of particular type.
         =====================     ====================================================================
+        
         :return:
            List of items shared with this site.
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Succcessfully fetch items of item_type 'Web Mapping Application' 
             for particular query 'school' for site
+            
             site1 = myHub.sites.get('itemId12345')
             site_apps = site1.search(query='school', item_type='Web Map')
             site_apps
+            
             >> List of relevant items
         """
         groups = self.catalog_groups
@@ -318,10 +381,12 @@ class Site(OrderedDict):
 
     def update(self, site_properties=None, data=None, thumbnail=None, metadata=None):
         """ Updates the site.
+        
         .. note::
             For site_properties, pass in arguments for only the properties you want to be updated.
             All other properties will be untouched.  For example, if you want to update only the
             site's description, then only provide the description argument in site_properties.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -333,14 +398,19 @@ class Site(OrderedDict):
         ---------------------     --------------------------------------------------------------------
         metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
+        
         To find the list of applicable options for argument site_properties - 
         https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
+        
         :return:
            A boolean indicating success (True) or failure (False).
+        
         .. code-block:: python
             USAGE EXAMPLE: Update a site successfully
+            
             site1 = myHub.sites.get('itemId12345')
             site1.update(site_properties={'description':'Description for site.'})
+        
             >> True
         """
         if site_properties:
@@ -351,20 +421,29 @@ class Site(OrderedDict):
 
     
     def update_layout(self, layout):
-        """ Updates the layout of the site.
+        """ Updates the layout of the site. 
+
+        .. note::
+            This operation can only be performed by the owner of the site or by an org administrator.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
         layout                    Required dictionary. The new layout dictionary to update to the site.
         =====================     ====================================================================
+        
         :return:
            A boolean indicating success (True) or failure (False).
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Update a site successfully
+            
             site1 = myHub.sites.get('itemId12345')
             site_layout = site1.layout
             site_layout.sections[0].rows[0].cards.pop(0)
             site1.update_layout(layout = site_layout)
+            
             >> True
         """
         #Deleting the draft file for this site, if exists
@@ -376,6 +455,44 @@ class Site(OrderedDict):
         #Update the data of the site
         self.definition['values']['layout'] = layout._json()
         return self.item.update(item_properties={'text': self.definition})
+
+    def update_theme(self, theme):
+        """ Updates the theme of the site. 
+
+        .. note::
+            This operation can only be performed by the owner of the site or by an org administrator.
+        
+        =====================     ====================================================================
+        **Argument**              **Description**
+        ---------------------     --------------------------------------------------------------------
+        theme                     Required dictionary. The new theme dictionary to update to the site.
+        =====================     ====================================================================
+        
+        :return:
+           A boolean indicating success (True) or failure (False).
+        
+        .. code-block:: python
+            
+            USAGE EXAMPLE: Update a site successfully
+            
+            site1 = myHub.sites.get('itemId12345')
+            site_theme = site1.theme
+            site_theme.body.background = '#ffffff'
+            site1.update_theme(theme = site_theme)
+            
+            >> True
+        """
+        #Deleting the draft file for this site, if exists
+        resources = self.item.resources.list()
+        for resource in resources:
+            if 'draft-' in resource['resource']:
+                path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
+                print(path)
+                self.item.resources.remove(file=path)
+        #Update the data of the site
+        self.definition['values']['theme'] = theme._json()
+        return self.item.update(item_properties={'text': self.definition})
+
 
 class SiteManager(object):
     """
@@ -479,20 +596,27 @@ class SiteManager(object):
     def add(self, title):
         """ 
         Adds a new site.
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         title               Required string.
         ===============     ====================================================================
+        
         :return:
            The site if successfully added, None if unsuccessful.
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Add an open data site in Hub successfully 
+            
             site1 = myHub.sites.add(title='My first site')
             site1.item
 
         .. code-block:: python
+            
             USAGE EXAMPLE: Add an initiative site successfully 
+            
             initiative_site = initiative1.sites.add(title=title)
             site1.item
         """
@@ -539,7 +663,7 @@ class SiteManager(object):
             description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"apps/sites/admin/"
 
             #Domain manipulation
-            domain = 'https://' + self._gis.url[7:] + '/apps/sites/#/'+subdomain
+            domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
 
             #Check if site subdomain exists
             if self._gis.content.search(query='typekeywords:hubsubdomain|'+subdomain+' AND title:'+title):
@@ -547,69 +671,93 @@ class SiteManager(object):
                 raise ValueError("You already have a site that uses this subdomain. Please provide another title.")
 
         #setting item properties based on type of site
-        #Hub Premium Site
-        if self._hub._hub_enabled:
+        if self._gis._portal.is_arcgisonline and self._hub._hub_enabled:
+            #Hub Premium Site
+            #if self._hub._hub_enabled:
             content_group_id = self.initiative.content_group_id
             collab_group_id = self.initiative.collab_group_id
-            collab_group = self._gis.groups.get(collab_group_id)
             _item_dict = {
-                        "type":item_type, 
-                        "typekeywords":typekeywords,
-                        "tags": tags,
-                        "title":title,
-                        "description":description, 
-                        "culture": self._gis.properties.user.culture,
-                        "properties":{
-                                    'hasSeenGlobalNav': True, 
-                                    'createdFrom': 'defaultInitiativeSiteTemplate', 
-                                    'schemaVersion': 1.3, 
-                                    'collaborationGroupId': collab_group_id, 
-                                    'contentGroupId': content_group_id, 
-                                    'followersGroupId': self.initiative.followers_group_id, 
-                                    'parentInitiativeId': self.initiative.itemid, 
-                                    'children': []
-                                    }, 
-                        "url":domain
-                        }
+                "type":item_type, 
+                "typekeywords":typekeywords,
+                "tags": tags,
+                "title":title,
+                "description":description, 
+                "culture": self._gis.properties.user.culture,
+                "properties": {
+                    'hasSeenGlobalNav': True, 
+                    'createdFrom': 'defaultInitiativeSiteTemplate', 
+                    'schemaVersion': 1.5, 
+                    'contentGroupId': content_group_id, 
+                    'followersGroupId': self.initiative.followers_group_id, 
+                    'parentInitiativeId': self.initiative.itemid, 
+                    'children': []
+                }, 
+                "url":domain
+            }
+            if collab_group_id:
+                collab_group = self._gis.groups.get(collab_group_id)
+                _item_dict["properties"]["collaborationGroupId"] = collab_group_id
             _datafile = 'init-sites-data.json'
             
         
-        #Non Hub Sites
+        #Non Hub Premium Sites
         else:
-            #Defining content, collaboration groups
-            _content_group_dict = {"title": subdomain + ' Content', "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
-            _collab_group_dict = {"title": subdomain + ' Core Team', "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
-            #Create groups
-            content_group =  self._gis.groups.create_from_dict(_content_group_dict)
-            content_group_id = content_group.id
-            collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
-            collab_group_id = collab_group.id
-            #Protect groups from accidental deletion
-            content_group.protected = True
-            collab_group.protected = True
+            #Checking if it is a Hub Basic site
+            if self._gis._portal.is_arcgisonline:
+                content_group_id = self.initiative.content_group_id
+                collab_group_id = self.initiative.collab_group_id
+            else:
+                #Defining content, collaboration groups for Enterprise Sites
+                _content_group_dict = {
+                    "title": subdomain + ' Content', 
+                    "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], 
+                    "access":"public"
+                }
+                _collab_group_dict = {
+                    "title": subdomain + ' Core Team', 
+                    "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "access":"org",
+                    "capabilities":"updateitemcontrol",
+                    "membershipAccess": "collaboration",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+                }
+                #Create groups
+                content_group =  self._gis.groups.create_from_dict(_content_group_dict)
+                content_group_id = content_group.id
+                #Create collaboration group if necessary privileges exist
+                if self._gis.users.me.role=='org_admin':
+                    collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+                    collab_group.protected = True
+                    collab_group_id = collab_group.id
+                #Protect groups from accidental deletion
+                content_group.protected = True
             _item_dict = {
-                        "type": item_type, 
-                        "typekeywords":typekeywords, 
-                        "tags": tags, 
-                        "title":title, 
-                        "description":description,
-                        "properties":{
-                                    'hasSeenGlobalNav': True, 
-                                    'createdFrom': 'solutionPortalSiteTemplate', 
-                                    'schemaVersion': 1.3, 
-                                    'contentGroupId': content_group_id,
-                                    'collaborationGroupId': collab_group.id,
-                                    'children': []
-                                    }, 
-                        "url":domain
-                        }
+                "type": item_type, 
+                "typekeywords":typekeywords, 
+                "tags": tags, 
+                "title":title, 
+                "description":description,
+                "properties": {
+                    'hasSeenGlobalNav': True, 
+                    'createdFrom': 'solutionPortalSiteTemplate', 
+                    'schemaVersion': 1.3, 
+                    'contentGroupId': content_group_id,
+                    'children': []
+                }, 
+                "url":domain
+            }
+            if collab_group_id is not None:
+                _item_dict["properties"]["collaborationGroupId"] = collab_group.id
             _datafile = 'sites-data.json'
 
         #Create site item, share with group
         site = self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
 
-        #Share with necessary group
-        site.share(groups=[collab_group])
+        #Share with necessary group if group exists
+        try:
+            site.share(groups=[collab_group])
+        except:
+            pass
 
         #protect site from accidental deletion
         site.protect(enable=True)
@@ -639,9 +787,11 @@ class SiteManager(object):
         ---------------     --------------------------------------------------------------------
         title               Optional String.
         ===============     ====================================================================
+        
         :return:
            Site.
         """
+        collab_group_id = None
         from datetime import timezone
         now = datetime.now(timezone.utc)
         #Checking if item of correct type has been passed 
@@ -663,7 +813,7 @@ class SiteManager(object):
         else:
             item_type = "Site Application"
             typekeywords = "Hub, hubSite, hubSolution, hubsubdomain|" +subdomain+", JavaScript, Map, Mapping Site, Online Map, OpenData, Ready To Use, selfConfigured, Web Map"
-            domain = 'https://' + self._gis.url[7:] + '/apps/sites/#/'+subdomain
+            domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
         _site_properties = {
                         "type":item_type, 
                         "typekeywords":typekeywords, 
@@ -671,46 +821,64 @@ class SiteManager(object):
                         "title":title, 
                         "url":domain
         }
-        #Updating properties, groups for initiative sites
+        #Updating properties, groups for Hub sites
         if self.initiative is not None:
             content_group_id = self.initiative.content_group_id
             collab_group_id = self.initiative.collab_group_id
-            collab_group = self._gis.groups.get(collab_group_id)
             _site_properties["properties"] = {
-                                            'hasSeenGlobalNav': True, 
-                                            'createdFrom': 'defaultInitiativeSiteTemplate', 
-                                            'schemaVersion': 1.2, 
-                                            'collaborationGroupId': collab_group_id, 
-                                            'contentGroupId': content_group_id, 
-                                            'followersGroupId': self.initiative.followers_group_id, 
-                                            'parentInitiativeId': self.initiative.itemid, 
-                                            'children': []
-                                        }
+                'hasSeenGlobalNav': True, 
+                'createdFrom': 'defaultInitiativeSiteTemplate', 
+                'schemaVersion': 1.5, 
+                'contentGroupId': content_group_id,
+                'parentInitiativeId': self.initiative.itemid, 
+                'children': []
+            }
+            if self._hub._hub_enabled:
+                _site_properties["properties"]['followersGroupId'] = self.initiative.followers_group_id
+            if collab_group_id:
+                collab_group = self._gis.groups.get(collab_group_id)
+                _site_properties["properties"]['collaborationGroupId'] = collab_group_id
         else:
-            #Defining content, collaboration groups
-            _content_group_dict = {"title": subdomain + ' Content', "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], "access":"public"}
-            _collab_group_dict = {"title": subdomain + ' Core Team', "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], "access":"org"}
-            #Create groups
+            #Defining content, collaboration groups for Enterprise Sites
+            _content_group_dict = {
+                "title": subdomain + ' Content', 
+                "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], 
+                "access":"public"
+            }
+            _collab_group_dict = {
+                "title": subdomain + ' Core Team', 
+                "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                "access":"org",
+                "capabilities":"updateitemcontrol",
+                "membershipAccess": "collaboration",
+                "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+            }
+            #Create content group
             content_group =  self._gis.groups.create_from_dict(_content_group_dict)
             content_group_id = content_group.id
-            collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
-            collab_group_id = collab_group.id
             #Protect groups from accidental deletion
             content_group.protected = True
-            collab_group.protected = True
             _site_properties["properties"] = {
                                             'hasSeenGlobalNav': True, 
                                             'createdFrom': 'solutionPortalSiteTemplate', 
-                                            'schemaVersion': 1.2, 
-                                            'collaborationGroupId': collab_group_id, 
+                                            'schemaVersion': 1.5,  
                                             'contentGroupId': content_group_id
                                             }
+            #Create collaboration group if privilege exists
+            if self._gis.users.me.role=='org_admin':
+                collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+                collab_group_id = collab_group.id
+                collab_group.protected = True
+                _site_properties["properties"]["collaborationGroupId"] = collab_group_id
             
         #Create site item, share with group
         new_item = self._gis.content.add(_site_properties, owner=self._gis.users.me.username)
 
         #Share with necessary group
-        new_item.share(groups=[collab_group])
+        try:
+            new_item.share(groups=[collab_group])
+        except:
+            pass
 
         #Register new site and update its data
         _data = self._create_and_register_site(new_item, subdomain, site.definition, content_group_id, collab_group_id)
@@ -735,15 +903,20 @@ class SiteManager(object):
 
     def get(self, site_id):
         """ Returns the site object for the specified site_id.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         site_id                    Required string. The site itemid.
         =======================    =============================================================
+        
         :return:
             The site object if the item is found, None if the item is not found.
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Fetch a site successfully
+        
             site1 = myHub.sites.get('itemId12345')
             site1.item
         """
@@ -755,19 +928,26 @@ class SiteManager(object):
 
     def get_by_domain(self, domain_url):
         """ Returns the site object for the specified domain url.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         domain_url                 Required string. The site url.
         =======================    =============================================================
+        
         :return:
             The site object if the item is found, None if the item is not found.
-        Note: You may only fetch sites by domain local to your environment.
-        E.g. If your Hub instance is an ArcGIS Online instance, then you can 
-        fetch ArcGIS Online sites by url, and if you have signed into an ArcGIS
-        Enterprise Instance, only sites on premise will be available.
+        
+        .. note:: 
+            You may only fetch sites by domain local to your environment.
+            E.g. If your Hub instance is an ArcGIS Online instance, then you can 
+            fetch ArcGIS Online sites by url, and if you have signed into an ArcGIS
+            Enterprise Instance, only sites on premise will be available.
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Fetch a site successfully
+            
             site1 = myHub.sites.get_by_domain('opendata.dc.gov')
             site1.item
         """
@@ -777,7 +957,11 @@ class SiteManager(object):
                 domain_url = urlparse(domain_url).netloc
             path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
             #fetch site itemid from domain service
-            _HEADERS = {'Content-Type': 'application/json', 'Authorization': self._gis._con.token, 'Referer': self._gis._con._referer}
+            _HEADERS = {
+                'Content-Type': 'application/json', 
+                'Authorization': self._gis._con.token, 
+                'Referer': self._gis._con._referer
+            }
             _site_domain = requests.get(path, headers = _HEADERS)
             try:
                 siteId = _site_domain.json()['siteId']
@@ -797,6 +981,7 @@ class SiteManager(object):
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for sites.
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -812,6 +997,7 @@ class SiteManager(object):
         ---------------     --------------------------------------------------------------------
         tags                Optional string. User-defined tags that describe the site.
         ===============     ====================================================================
+        
         :return:
            A list of matching sites.
         """
@@ -863,7 +1049,11 @@ class Page(OrderedDict):
             self.definition = None
             
     def __repr__(self):
-        return '<%s title:"%s" owner:%s>' % (type(self).__name__, self.item.title, self.item.owner)
+        return '<%s title:"%s" owner:%s>' % (
+            type(self).__name__, 
+            self.item.title, 
+            self.item.owner
+        )
     
     @property
     def itemid(self):
@@ -924,10 +1114,13 @@ class Page(OrderedDict):
 
     def update(self, page_properties=None, slug=None, data=None, thumbnail=None, metadata=None):
         """ Updates the page.
+        
         .. note::
+            
             For page_properties, pass in arguments for only the properties you want to be updated.
             All other properties will be untouched.  For example, if you want to update only the
             page's description, then only provide the description argument in page_properties.
+        
         =====================     ====================================================================
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
@@ -939,14 +1132,20 @@ class Page(OrderedDict):
         ---------------------     --------------------------------------------------------------------
         metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
+        
         To find the list of applicable options for argument page_properties - 
         https://esri.github.io/arcgis-python-api/apidoc/html/arcgis.gis.toc.html#arcgis.gis.Item.update
+        
         :return:
            A boolean indicating success (True) or failure (False).
+        
         .. code-block:: python
+            
             USAGE EXAMPLE: Update a page successfully
+            
             page1 = mySite.pages.get('itemId12345')
             page1.update(page_properties={'description':'Description for page.'})
+            
             >> True
         """
         _page_data = self.definition
@@ -994,12 +1193,17 @@ class Page(OrderedDict):
     def delete(self):
         """
         Deletes the page. If unable to delete, raises a RuntimeException.
+        
         :return:
             A bool containing True (for success) or False (for failure). 
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Delete a page successfully
+        
             page1 = myHub.pages.get('itemId12345')
             page1.delete()
+        
             >> True
         """
         #Unlink sites
@@ -1030,6 +1234,7 @@ class PageManager(object):
     def add(self, title, site=None):
         """ 
         Returns the pages linked to the specific site.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
@@ -1037,15 +1242,21 @@ class PageManager(object):
         -----------------------    -------------------------------------------------------------
         site                       Optional string. The site object to add the page to.
         =======================    =============================================================
+        
         :return:
            The page if successfully added, None if unsuccessful.
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Add a page to a site successfully 
+        
             page1 = mySite.pages.add(title='My first page')
             page1.item
 
         .. code-block:: python
+        
             USAGE EXAMPLE: Add a page successfully 
+        
             page2 = myHub.pages.add(title='My second page', site=mySite)
             page2.item
         """
@@ -1115,6 +1326,7 @@ class PageManager(object):
         ---------------     --------------------------------------------------------------------
         site                Optional Site object.
         ===============     ====================================================================
+        
         :return:
            Page.
         """
@@ -1143,14 +1355,18 @@ class PageManager(object):
     def get(self, page_id):
         """ 
         Returns the page object for the specified page_id.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
         page_id                    Required string. The page itemid.
         =======================    =============================================================
+        
         :return:
             The page object if the item is found, None if the item is not found.
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Fetch a page successfully
             page1 = myHub.pages.get('itemId12345')
             page1.item
@@ -1164,6 +1380,7 @@ class PageManager(object):
     def link(self, page, site=None, slug=None):
         """ 
         Links the page to the specific site.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
@@ -1173,16 +1390,22 @@ class PageManager(object):
         -----------------------    -------------------------------------------------------------
         slug                       Optional string. The slug reference of the page in this site.
         =======================    =============================================================
+        
         :return:
             A bool containing True (for success) or False (for failure).
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Link a page successfully for specific site
             mySite.pages.link(page_id='itemId12345')
+        
             >> True
             
         .. code-block:: python
+        
             USAGE EXAMPLE: Link a page successfully for site object passed as param
             myHub.pages.link(page_id='itemId12345', site=mySite)
+        
             >> True
         """
         _new_page = {}
@@ -1218,6 +1441,7 @@ class PageManager(object):
     def unlink(self, page, site=None):
         """ 
         Unlinks the page from the specific site.
+        
         =======================    =============================================================
         **Argument**               **Description**
         -----------------------    -------------------------------------------------------------
@@ -1225,16 +1449,24 @@ class PageManager(object):
         -----------------------    -------------------------------------------------------------
         site                       Optional string. The site object to unlink page from.
         =======================    =============================================================
+        
         :return:
             A bool containing True (for success) or False (for failure).
+        
         .. code-block:: python
+        
             USAGE EXAMPLE: Unlink a page successfully from specific site
+        
             mySite.pages.unlink(page_id='itemId12345')
+        
             >> True
             
         .. code-block:: python
+        
             USAGE EXAMPLE: Unlink a page successfully from site object passed as param
+        
             myHub.pages.unlink(page_id='itemId12345', site=mySite)
+        
             >> True
         """
         #If site object is not provided
@@ -1264,6 +1496,7 @@ class PageManager(object):
     def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for pages.
+        
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -1279,6 +1512,7 @@ class PageManager(object):
         ---------------     --------------------------------------------------------------------
         tags                Optional string. User-defined tags that describe the page.
         ===============     ====================================================================
+        
         :return:
            A list of matching pages.
         """
