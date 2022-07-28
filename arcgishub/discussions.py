@@ -249,7 +249,6 @@ class Post(OrderedDict):
         
         url = 'https://hub.arcgis.com/api/discussions/v1/reactions/{}'.format(id)
         res = requests.delete(url, headers=self.header)
-        print(res)
 
         if res.json()['success']:
             return True
@@ -637,7 +636,6 @@ class ChannelManager(object):
         else: 
             res = requests.get('https://hub.arcgis.com/api/discussions/v1/channels'.format(self.env), headers=self.header)
         
-        print(res.json())
         parsed_channels = res.json()['items']
     
         channels = []
@@ -663,7 +661,6 @@ class ChannelManager(object):
 
         res = requests.get('https://hub.arcgis.com/api/discussions/v1/channels/{}'.format(id), headers=self.header)
         channelProperties = res.json()
-        print(res)
         return Channel(self._hub, channelProperties)
 
     def add(self, channelProperties):
@@ -730,7 +727,6 @@ class ChannelManager(object):
         res = requests.post('https://hub.arcgis.com/api/discussions/v1/channels'.format(self.env), data=json.dumps(payload), headers=self.header)
 
         # return Channel object is found, if not raise Exception
-        print(res.json())
         try:
             return self.get(res.json()['id'])
         except:
