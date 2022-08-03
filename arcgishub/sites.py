@@ -98,6 +98,26 @@ class Site(OrderedDict):
         return self.item.url
 
     @property
+    def initiative_id(self):
+        """
+        Returns the initiative id (if available) of the site
+        """
+        try:
+            return self.item.properties['parentInitiativeId']
+        except:
+            return None
+
+    @_lazy_property
+    def initiative(self):
+        """
+        Returns the initiative object (if available) for the site
+        """
+        try:
+            return self._gis.hub.initiatives.get(self.initiative_id)
+        except:
+            return None
+
+    @property
     def content_group_id(self):
         """
         Returns the groupId for the content group
@@ -258,6 +278,7 @@ class Site(OrderedDict):
             }
             path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
             _delete_domain = requests.delete(path, headers = _HEADERS)
+            #if deletion is successful
             if _delete_domain.status_code==200:
                 #Delete site item
                 return self.item.delete()
@@ -379,7 +400,7 @@ class Site(OrderedDict):
             result = [item for item in result if item.type==item_type]
         return result
 
-    def update(self, site_properties=None, data=None, thumbnail=None, metadata=None):
+    def update(self, site_properties=None, subdomain=None, data=None, thumbnail=None, metadata=None):
         """ Updates the site.
         
         .. note::
@@ -391,6 +412,8 @@ class Site(OrderedDict):
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
         site_properties           Required dictionary. See URL below for the keys and values.
+        ---------------------     --------------------------------------------------------------------
+        subdomain                 Optional string. New subdomain for the site.
         ---------------------     --------------------------------------------------------------------
         data                      Optional string. Either a path or URL to the data.
         ---------------------     --------------------------------------------------------------------
@@ -413,11 +436,96 @@ class Site(OrderedDict):
         
             >> True
         """
+        _site_data = self.definition
         if site_properties:
-            _site_data = self.definition
             for key, value in site_properties.items():
                 _site_data[key] = value
-            return self.item.update(_site_data, data, thumbnail, metadata)
+        if subdomain:
+            #format subdomain if needed
+            subdomain = subdomain.replace(' ', '-').lower()
+            #Domain manipulation for new subdomain
+            if self._gis._portal.is_arcgisonline:
+                #Check for length of domain
+                if len(subdomain + '-' + self._gis.properties['urlKey']) > 63:
+                    _num = 63 - len(self._gis.properties['urlKey'])
+                    raise ValueError('Requested url too long. Please enter a subdomain shorter than %d characters' %_num)
+                #Fetch siteId from domain entry
+                _HEADERS = {
+                    'Content-Type': 'application/json', 
+                    'Authorization': self._gis._con.token, 
+                    'Referer': self._gis._con._referer
+                }
+                path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
+                _site_domain = requests.get(path, headers = _HEADERS)
+                _siteId = _site_domain.json()[0]['id']
+                client_key = _site_domain.json()[0]['clientKey']
+                #Delete old domain entry
+                _HEADERS = {
+                    'Content-Type': 'application/json', 
+                    'Authorization': self._gis._con.token, 
+                    'Referer': self._gis._con._referer
+                }
+                path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
+                _delete_domain = requests.delete(path, headers = _HEADERS)
+                #if deletion is successful
+                if _delete_domain.status_code==200:
+                    #Create new domain entry
+
+                    #Create domain entry for new site
+                    _HEADERS = {
+                        'Content-Type': 'application/json', 
+                        'Authorization': self._gis._con.token,
+                        'Referer': self._gis._con._referer
+                    }
+                    _body = {
+                        'hostname': subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com', 
+                        'siteId': self.item.id, 
+                        'siteTitle': self.title, 
+                        'clientKey': client_key, 
+                        'orgId': self._gis.properties.id, 
+                        'orgKey': self._gis.properties['urlKey'], 
+                        'orgTitle':self._gis.properties['name'],
+                        'sslOnly':True
+                    }
+                    path = 'https://hub.arcgis.com/utilities/domains'
+                    _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
+                    if _new_domain.status_code==200:
+                        #define new domain and hostname
+                        domain = self._gis.url[:8] + subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+                        hostname = subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+                        #update initiative item 
+                        self.initiative.item.update(item_properties={'url':domain})
+                        #update site item and data
+                        data = self.definition
+                        data['values']['defaultHostname'] = hostname
+                        data['values']['subdomain'] = subdomain
+                        data['values']['internalUrl'] = hostname
+                        if self.item.update(item_properties={'url':domain, 'text':data}):
+                            return domain
+                    #if creating new domain entry fails
+                    else:
+                        return _new_domain.content
+                #if deleting old domain entry fails
+                else:
+                    return _delete_domain.content
+            #For enterprise sites
+            else:
+                #Check for length of domain
+                if len(subdomain) > 63:
+                    raise ValueError('Requested url too long. Please enter a name shorter than 63 characters')
+                typeKeywords = self.item.typeKeywords
+                typeKeywords = [keyword for keyword in typeKeywords if 'hubsubdomain' not in keyword]
+                typeKeywords.append('hubsubdomain|'+subdomain)
+                #Domain manipulation
+                domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
+                hostname = self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
+                data = self.definition
+                data['values']['defaultHostname'] = hostname
+                data['values']['subdomain'] = subdomain
+                data['values']['internalUrl'] = hostname
+                if self.item.update(item_properties={'typeKeywords':typeKeywords, 'url':domain, 'text':data}):
+                    return domain
+        return self.item.update(_site_data, data, thumbnail, metadata)
 
     
     def update_layout(self, layout):
@@ -487,7 +595,6 @@ class Site(OrderedDict):
         for resource in resources:
             if 'draft-' in resource['resource']:
                 path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
-                print(path)
                 self.item.resources.remove(file=path)
         #Update the data of the site
         self.definition['values']['theme'] = theme._json()
