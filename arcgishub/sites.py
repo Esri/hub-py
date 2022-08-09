@@ -400,7 +400,7 @@ class Site(OrderedDict):
             result = [item for item in result if item.type==item_type]
         return result
 
-    def update(self, site_properties=None, subdomain=None, data=None, thumbnail=None, metadata=None):
+    def update(self, site_properties=None, subdomain=None):
         """ Updates the site.
         
         .. note::
@@ -414,12 +414,6 @@ class Site(OrderedDict):
         site_properties           Required dictionary. See URL below for the keys and values.
         ---------------------     --------------------------------------------------------------------
         subdomain                 Optional string. New subdomain for the site.
-        ---------------------     --------------------------------------------------------------------
-        data                      Optional string. Either a path or URL to the data.
-        ---------------------     --------------------------------------------------------------------
-        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
-        ---------------------     --------------------------------------------------------------------
-        metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
         
         To find the list of applicable options for argument site_properties - 
@@ -491,8 +485,8 @@ class Site(OrderedDict):
                     _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
                     if _new_domain.status_code==200:
                         #define new domain and hostname
-                        domain = self._gis.url[:8] + subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
                         hostname = subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+                        domain = self._gis.url[:8] + hostname
                         #update initiative item 
                         self.initiative.item.update(item_properties={'url':domain})
                         #update site item and data
@@ -517,15 +511,15 @@ class Site(OrderedDict):
                 typeKeywords = [keyword for keyword in typeKeywords if 'hubsubdomain' not in keyword]
                 typeKeywords.append('hubsubdomain|'+subdomain)
                 #Domain manipulation
-                domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
                 hostname = self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
+                domain = 'https://' + hostname
                 data = self.definition
                 data['values']['defaultHostname'] = hostname
                 data['values']['subdomain'] = subdomain
                 data['values']['internalUrl'] = hostname
                 if self.item.update(item_properties={'typeKeywords':typeKeywords, 'url':domain, 'text':data}):
                     return domain
-        return self.item.update(_site_data, data, thumbnail, metadata)
+        return self.item.update(_site_data)
 
     
     def update_layout(self, layout):
@@ -700,7 +694,7 @@ class SiteManager(object):
         #site_data['values']['theme'] = self._gis.properties['portalProperties']['sharedTheme']
         return site_data
 
-    def add(self, title):
+    def add(self, title, subdomain=None):
         """ 
         Adds a new site.
         
@@ -708,6 +702,8 @@ class SiteManager(object):
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
         title               Required string.
+        ---------------     --------------------------------------------------------------------
+        subdomain           Optional string. Available ONLY with Enterprise Sites.
         ===============     ====================================================================
         
         :return:
@@ -729,7 +725,18 @@ class SiteManager(object):
         """
 
         siteId = None
-        subdomain = title.replace(' ', '-').lower()
+        #Checking if subdomain is provided
+        if subdomain:
+            #disallow for AGO
+            if self._gis._portal.is_arcgisonline:
+                raise Exception('The option to add sites with custom subdomain is only available with Enterprise Sites. Please add this site without custom subdomain.')
+            #re-format if given for Enterprise sites
+            else:
+                subdomain = subdomain.replace(' ', '-').lower()
+        #re-format title if subdomain not provided
+        else:
+            subdomain = title.replace(' ', '-').lower()
+        
         #Check if initiative or site needs to be created for this gis
         if self._gis._portal.is_arcgisonline:
             if self._hub._hub_enabled:
@@ -1219,7 +1226,7 @@ class Page(OrderedDict):
         """
         return self.title.replace(' ', '-').lower()
 
-    def update(self, page_properties=None, slug=None, data=None, thumbnail=None, metadata=None):
+    def update(self, page_properties=None, slug=None):
         """ Updates the page.
         
         .. note::
@@ -1233,11 +1240,7 @@ class Page(OrderedDict):
         ---------------------     --------------------------------------------------------------------
         page_properties           Required dictionary. See URL below for the keys and values.
         ---------------------     --------------------------------------------------------------------
-        data                      Optional string. Either a path or URL to the data.
-        ---------------------     --------------------------------------------------------------------
-        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
-        ---------------------     --------------------------------------------------------------------
-        metadata                  Optional string. Either a path or URL to the metadata.
+        slug                      Optional string. The slug or subdomain for the page.
         =====================     ====================================================================
         
         To find the list of applicable options for argument page_properties - 
@@ -1275,7 +1278,7 @@ class Page(OrderedDict):
                 site.item.update(item_properties={'text': site.definition})
             #Update the slug on the page
             _page_data['title'] = slug
-        return self.item.update(_page_data, data, thumbnail, metadata)
+        return self.item.update(_page_data, data)
 
     def update_layout(self, layout):
         """ Updates the layout of the page.
