@@ -98,6 +98,19 @@ class Hub(object):
             return True
         except:
             return False
+
+    @property
+    def _hub_environment(self):
+        """
+        Returns the hub url corresponding to the dev/qa/prod environment.
+        """
+        url = self.gis.url
+        if 'devext' in url:
+            return 'https://hubdev.arcgis.com'
+        elif 'mapsqa' in url:
+            return 'https://hubqa.arcgis.com'
+        else:
+            return 'https://hub.arcgis.com'
             
     @property
     def enterprise_org_id(self):
@@ -590,7 +603,7 @@ class Initiative(OrderedDict):
         return result2
 
 
-    def update(self, initiative_properties=None, data=None, thumbnail=None, metadata=None):
+    def update(self, initiative_properties=None):
         """ Updates the initiative.
 
 
@@ -604,12 +617,6 @@ class Initiative(OrderedDict):
         **Argument**              **Description**
         ---------------------     --------------------------------------------------------------------
         initiative_properties     Required dictionary. See URL below for the keys and values.
-        ---------------------     --------------------------------------------------------------------
-        data                      Optional string. Either a path or URL to the data.
-        ---------------------     --------------------------------------------------------------------
-        thumbnail                 Optional string. Either a path or URL to a thumbnail image.
-        ---------------------     --------------------------------------------------------------------
-        metadata                  Optional string. Either a path or URL to the metadata.
         =====================     ====================================================================
         
         To find the list of applicable options for argument initiative_properties - 
@@ -649,7 +656,7 @@ class Initiative(OrderedDict):
                     _content_group = self._gis.groups.get(self.content_group_id)
                     #Update title for group
                     _content_group.update(title=title+' Content')
-            return self.item.update(_initiative_data, data, thumbnail, metadata)
+            return self.item.update(_initiative_data)
     
 class InitiativeManager(object):
     """
@@ -662,7 +669,7 @@ class InitiativeManager(object):
         self._hub = hub
         self._gis = self._hub.gis
           
-    def add(self, title, description=None, site=None, data=None, thumbnail=None):
+    def add(self, title, description=None, site=None):
         """ 
         Adds a new initiative to the Hub.
         ===============     ====================================================================
@@ -673,10 +680,6 @@ class InitiativeManager(object):
         description         Optional string. 
         ---------------     --------------------------------------------------------------------
         site                Optional Site object. 
-        ---------------     --------------------------------------------------------------------
-        data                Optional string. Either a path or URL to the data.
-        ---------------     --------------------------------------------------------------------
-        thumbnail           Optional string. Either a path or URL to a thumbnail image.
         ===============     ====================================================================
         
         :return:
