@@ -822,18 +822,19 @@ class SiteManager(object):
                 collab_group_id = self.initiative.collab_group_id
             else:
                 #Defining content, collaboration groups for Enterprise Sites
+                collab_group_id = None
                 _content_group_dict = {
-                    "title": subdomain + ' Content', 
-                    "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], 
+                    "title": subdomain + ' Content',
+                    "tags": ["Sites Group", "Sites Content Group"], 
                     "access":"public"
                 }
                 _collab_group_dict = {
                     "title": subdomain + ' Core Team', 
-                    "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "tags": ["Sites Group", "Sites Core Team Group"], 
                     "access":"org",
-                    "capabilities":"updateitemcontrol",
-                    "membershipAccess": "collaboration",
-                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+                    "capabilities": "updateitemcontrol",
+                    "membershipAccess": "org",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+subdomain+"."
                 }
                 #Create groups
                 content_group =  self._gis.groups.create_from_dict(_content_group_dict)
@@ -853,8 +854,8 @@ class SiteManager(object):
                 "description":description,
                 "properties": {
                     'hasSeenGlobalNav': True, 
-                    'createdFrom': 'solutionPortalSiteTemplate', 
-                    'schemaVersion': 1.3, 
+                    'createdFrom': 'portalDefaultSite', 
+                    'schemaVersion': 1.5, 
                     'contentGroupId': content_group_id,
                     'children': []
                 }, 
