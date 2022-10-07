@@ -57,5 +57,7 @@ If you are working with `arcgishub` >=v2.1.0, you will find the above examples a
 
 Older versions of this API can also be found in the [ArcGIS API for Python](https://developers.arcgis.com/python/). You can find user guides to access Hub using it, under the [For ArcGIS API for Python](https://github.com/esridc/hub-py/tree/master/examples/For%20ArcGIS%20API%20for%20Python) subdirectory.
 
+### Reporting issues and feedback
 
-We encourage you to provide feedback/issues in implementation, under GitHub [issues](https://github.com/esridc/hub-py/issues) for this repo.
+We strongly encourage you to provide feedback and report issues in implementation, under GitHub [issues](https://github.com/esridc/hub-py/issues) for this repo. Under the `New Issue` button on that page, you will find an option to add a Bug or Enhancement report along with guidelines. Issues reported via our Github repository will be prioritized in subsequent changes.
+Report a bug when you observe unexpected or flawed behavior while working with our API. Report an Enhancement when you would like for a particular Hub object to also support new or improved capabilities within hub-py.
