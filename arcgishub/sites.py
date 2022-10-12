@@ -336,7 +336,7 @@ class Site(OrderedDict):
                     "tags": ["Hub Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
                     "access":"org",
                     "capabilities":"updateitemcontrol",
-                    "membershipAccess": "collaboration",
+                    "membershipAccess": "org",
                     "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
                 }
                 collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
@@ -824,7 +824,7 @@ class SiteManager(object):
                 #Defining content, collaboration groups for Enterprise Sites
                 collab_group_id = None
                 _content_group_dict = {
-                    "title": subdomain + ' Content',
+                    "title": subdomain + ' Content', 
                     "tags": ["Sites Group", "Sites Content Group"], 
                     "access":"public"
                 }
@@ -965,7 +965,7 @@ class SiteManager(object):
                 "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
                 "access":"org",
                 "capabilities":"updateitemcontrol",
-                "membershipAccess": "collaboration",
+                "membershipAccess": "org",
                 "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
             }
             #Create content group
@@ -1279,7 +1279,7 @@ class Page(OrderedDict):
                 site.item.update(item_properties={'text': site.definition})
             #Update the slug on the page
             _page_data['title'] = slug
-        return self.item.update(_page_data, data)
+        return self.item.update(_page_data)
 
     def update_layout(self, layout):
         """ Updates the layout of the page.
