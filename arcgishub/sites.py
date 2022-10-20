@@ -1,5 +1,4 @@
 from arcgis.gis import GIS
-from arcgis.features import FeatureLayer
 from arcgis._impl.common._mixins import PropertyMap
 from arcgis._impl.common._isd import InsensitiveDict
 from datetime import datetime
@@ -241,18 +240,23 @@ class Site(OrderedDict):
             pass
         #Delete enterprise site
         if not self._gis._portal.is_arcgisonline:
-             #Fetch Enterprise Site Collaboration group
-            _collab_groupId = self.item.properties['collaborationGroupId']
-            _collab_group = self._gis.groups.get(_collab_groupId)
+            #Fetch Enterprise Site Collaboration group
+            _collab_group = None
+            try:
+                _collab_groupId = self.item.properties['collaborationGroupId']
+                _collab_group = self._gis.groups.get(_collab_groupId)
+            except:
+                pass
             #Fetch Content Group
             _content_groupId = self.item.properties['contentGroupId']
             _content_group = self._gis.groups.get(_content_groupId)
             #Disable delete protection on groups and site
-            _collab_group.protected = False
+            if collab_group:
+                _collab_group.protected = False
+                _collab_group.delete()
             _content_group.protected = False
             self.item.protect(enable=False)
             #Delete groups, site and initiative
-            _collab_group.delete()
             _content_group.delete()
             return self.item.delete()
         #Deleting hub sites
@@ -697,6 +701,9 @@ class SiteManager(object):
     def add(self, title, subdomain=None):
         """ 
         Adds a new site.
+
+        .. note:: 
+            Unicode characters are not allowed in the title of the site.
         
         ===============     ====================================================================
         **Argument**        **Description**
@@ -777,7 +784,7 @@ class SiteManager(object):
             description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Enterprise Sites application. To make changes to this site, please visit" + self._gis.url +"apps/sites/admin/"
 
             #Domain manipulation
-            domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
+            domain = 'https://' + self._gis.url[8:-5] + 'apps/sites/#/'+subdomain
 
             #Check if site subdomain exists
             if self._gis.content.search(query='typekeywords:hubsubdomain|'+subdomain+' AND title:'+title):
@@ -818,15 +825,30 @@ class SiteManager(object):
         else:
             #Checking if it is a Hub Basic site
             if self._gis._portal.is_arcgisonline:
-                content_group_id = self.initiative.content_group_id
-                collab_group_id = self.initiative.collab_group_id
+                _content_group_title = title + ' Content'
+                _content_group_dict = {
+                    "title": _content_group_title, 
+                    "tags": ["Hub Group", "Hub Content Group", "Hub Site Group"], 
+                    "access":"public"
+                }
+                _collab_group_title = title + ' Core Team'
+                _collab_group_dict = {
+                    "title": _collab_group_title, 
+                    "tags": ["Hub Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "access":"org",
+                    "capabilities":"updateitemcontrol",
+                    "membershipAccess": "collaboration",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+title+"."
+                }
+                created_from = 'basicDefaultSite Solution Template (embedded)'
             else:
                 #Defining content, collaboration groups for Enterprise Sites
                 collab_group_id = None
                 _content_group_dict = {
                     "title": subdomain + ' Content', 
                     "tags": ["Sites Group", "Sites Content Group"], 
-                    "access":"public"
+                    "access":"org",
+                    "snippet": "Applications, maps, data, etc. shared with this group generates the "+subdomain+" content catalog."
                 }
                 _collab_group_dict = {
                     "title": subdomain + ' Core Team', 
@@ -836,16 +858,17 @@ class SiteManager(object):
                     "membershipAccess": "org",
                     "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+subdomain+"."
                 }
-                #Create groups
-                content_group =  self._gis.groups.create_from_dict(_content_group_dict)
-                content_group_id = content_group.id
-                #Create collaboration group if necessary privileges exist
-                if self._gis.users.me.role=='org_admin':
-                    collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
-                    collab_group.protected = True
-                    collab_group_id = collab_group.id
-                #Protect groups from accidental deletion
-                content_group.protected = True
+                created_from = 'portalDefaultSite'
+            #Create groups
+            content_group =  self._gis.groups.create_from_dict(_content_group_dict)
+            content_group_id = content_group.id
+            #Create collaboration group if necessary privileges exist
+            if self._gis.users.me.role=='org_admin':
+                collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
+                collab_group.protected = True
+                collab_group_id = collab_group.id
+            #Protect groups from accidental deletion
+            content_group.protected = True
             _item_dict = {
                 "type": item_type, 
                 "typekeywords":typekeywords, 
@@ -854,7 +877,7 @@ class SiteManager(object):
                 "description":description,
                 "properties": {
                     'hasSeenGlobalNav': True, 
-                    'createdFrom': 'portalDefaultSite', 
+                    'createdFrom': created_from, 
                     'schemaVersion': 1.5, 
                     'contentGroupId': content_group_id,
                     'children': []
@@ -893,6 +916,10 @@ class SiteManager(object):
         """
         Clone allows for the creation of a site that is derived from the current site.
 
+        .. note:: 
+            Use this method if you are cloning a Site object from a Hub Basic or Enterprise environment.
+            To clone from Hub Premium environments, please use the `initiatives.clone` method.
+
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -919,20 +946,21 @@ class SiteManager(object):
             if self._hub._hub_enabled:
                 return self._hub.initiatives.add(title, site=site)
         subdomain = title.replace(' ', '-').lower()
+        #For Hub Sites
         if self._gis._portal.is_arcgisonline:
             item_type = "Hub Site Application"
             typekeywords = "Hub, hubSite, hubSolution, JavaScript, Map, Mapping Site, Online Map, OpenData, Ready To Use, selfConfigured, Web Map, Registered App"
             description = "DO NOT DELETE OR MODIFY THIS ITEM. This item is managed by the ArcGIS Hub application. To make changes to this site, please visit https://hub.arcgis.com/admin/"
             domain = self._gis.url[:8] + subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
-    
+        #For Enterprise Sites
         else:
             item_type = "Site Application"
             typekeywords = "Hub, hubSite, hubSolution, hubsubdomain|" +subdomain+", JavaScript, Map, Mapping Site, Online Map, OpenData, Ready To Use, selfConfigured, Web Map"
-            domain = 'https://' + self._gis.url[7:-5] + '/apps/sites/#/'+subdomain
+            domain = 'https://' + self._gis.url[8:-5] + 'apps/sites/#/'+subdomain
         _site_properties = {
                         "type":item_type, 
                         "typekeywords":typekeywords, 
-                        "tags": ["Hub Site"], 
+                        "tags": ["Enterprise Site"], 
                         "title":title, 
                         "url":domain
         }
@@ -954,20 +982,40 @@ class SiteManager(object):
                 collab_group = self._gis.groups.get(collab_group_id)
                 _site_properties["properties"]['collaborationGroupId'] = collab_group_id
         else:
-            #Defining content, collaboration groups for Enterprise Sites
-            _content_group_dict = {
-                "title": subdomain + ' Content', 
-                "tags": ["Hub Group", "Hub Content Group", "Hub Site Group", "Hub Initiative Group"], 
-                "access":"public"
-            }
-            _collab_group_dict = {
-                "title": subdomain + ' Core Team', 
-                "tags": ["Hub Group", "Hub Initiative Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
-                "access":"org",
-                "capabilities":"updateitemcontrol",
-                "membershipAccess": "org",
-                "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
-            }
+            #Defining content, collaboration groups for Hub Basic and Enterprise Sites
+            #For Hub Basic Sites
+            if self._gis._portal.is_arcgisonline:
+                _content_group_dict = {
+                    "title": subdomain + ' Content', 
+                    "tags": ["Hub Group", "Hub Content Group", "Hub Site Group"], 
+                    "access":"public"
+                }
+                _collab_group_dict = {
+                    "title": subdomain + ' Core Team', 
+                    "tags": ["Hub Group", "Hub Site Group", "Hub Core Team Group", "Hub Team Group"], 
+                    "access":"org",
+                    "capabilities":"updateitemcontrol",
+                    "membershipAccess": "collaboration",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+subdomain+"."
+                }
+                created_from = 'basicDefaultSite Solution Template (embedded)'
+            #For Enterprise Sites
+            else:
+                _content_group_dict = {
+                    "title": subdomain + ' Content', 
+                    "tags": ["Sites Group", "Sites Content Group"], 
+                    "access":"org",
+                    "snippet": "Applications, maps, data, etc. shared with this group generates the "+subdomain+" content catalog."
+                }
+                _collab_group_dict = {
+                    "title": subdomain + ' Core Team', 
+                    "tags": ["Sites Group", "Sites Core Team Group"], 
+                    "access":"org",
+                    "capabilities": "updateitemcontrol",
+                    "membershipAccess": "org",
+                    "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+subdomain+"."
+                }
+                created_from = 'portalDefaultSite'
             #Create content group
             content_group =  self._gis.groups.create_from_dict(_content_group_dict)
             content_group_id = content_group.id
@@ -975,7 +1023,7 @@ class SiteManager(object):
             content_group.protected = True
             _site_properties["properties"] = {
                                             'hasSeenGlobalNav': True, 
-                                            'createdFrom': 'solutionPortalSiteTemplate', 
+                                            'createdFrom': created_from, 
                                             'schemaVersion': 1.5,  
                                             'contentGroupId': content_group_id
                                             }
@@ -1378,8 +1426,11 @@ class PageManager(object):
         #If called from a specified site
         if self._site is not None:
             site = self._site
-        #Fetch site group
-        collab_group = self._gis.groups.get(site.collab_group_id)
+        #Fetch site collab group if exists
+        try:
+            collab_group = self._gis.groups.get(site.collab_group_id)
+        except:
+            collab_group = None
     
         #For pages in ArcGIS Online
         if self._gis._portal.is_arcgisonline:
@@ -1405,7 +1456,8 @@ class PageManager(object):
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         
         #share page with content and core team groups
-        item.share(groups=[collab_group])
+        if collab_group:
+            item.share(groups=[collab_group])
 
         #protect page from accidental deletion
         item.protect(enable=True)

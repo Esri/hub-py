@@ -194,7 +194,10 @@ class Hub(object):
         """
         The resource manager for Hub initiatives. See :class:`~arcgis.apps.hub.InitiativeManager`.
         """
-        return InitiativeManager(self)
+        if self._hub_enabled:
+            return InitiativeManager(self)
+        else:
+            raise Exception("Initiatives are only available with Hub Premium. Please upgrade to Hub Premium to use this feature.")
     
     @_lazy_property
     def events(self):
@@ -672,6 +675,10 @@ class InitiativeManager(object):
     def add(self, title, description=None, site=None):
         """ 
         Adds a new initiative to the Hub.
+
+        .. note:: 
+            Unicode characters are not allowed in the title of the initiative/site.
+
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
@@ -692,7 +699,6 @@ class InitiativeManager(object):
             initiative1 = myHub.initiatives.add(title='Vision Zero Analysis')
             initiative1.item
         """
-
         #Define initiative
         if description is None:
             description = (
@@ -726,7 +732,7 @@ class InitiativeManager(object):
             "access":"org",
             "capabilities":"updateitemcontrol",
             "membershipAccess": "collaboration",
-            "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to hub-groups."
+            "snippet": "Members of this group can create, edit, and manage the site, pages, and other content related to "+title+"."
         }
         _followers_group_title = title + ' Followers'
         _followers_group_dict = {
