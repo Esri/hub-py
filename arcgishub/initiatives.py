@@ -648,9 +648,6 @@ class InitiativeManager(object):
         ===============     ====================================================================
         **Argument**        **Description**
         ---------------     --------------------------------------------------------------------
-        scope               Optional string. Defines the scope of search.
-                            Valid values are 'official', 'community' or 'all'.
-        ---------------     --------------------------------------------------------------------
         title               Optional string. Return initiatives with provided string in title.
         ---------------     --------------------------------------------------------------------
         owner               Optional string. Return initiatives owned by a username.
@@ -681,22 +678,6 @@ class InitiativeManager(object):
             query += ' AND modified:'+modified
         if tags!=None:
             query += ' AND tags:'+tags
-        
-        #Apply org scope and search
-        if scope is None or self._gis.url=='https://www.arcgis.com':
-            items = self._gis.content.search(query=query, max_items=5000)
-        elif scope.lower()=='official':
-            query += ' AND access:public'
-            _gis = GIS(self._hub.enterprise_org_url)
-            items = _gis.content.search(query=query, max_items=5000)
-        elif scope.lower()=='community':
-            query += ' AND access:public'
-            _gis = GIS(self._hub.community_org_url)
-            items = _gis.content.search(query=query, max_items=5000)
-        elif scope.lower()=='all':
-            items = self._gis.content.search(query=query, outside_org=True, max_items=5000)
-        else:
-            raise Exception("Invalid value for scope")
             
         #Return searched initiatives
         for item in items:
