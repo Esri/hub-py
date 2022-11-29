@@ -131,14 +131,19 @@ class Page(OrderedDict):
             for item in linked_sites:
                 #Update the title and slug on the parent sites
                 site_item = self._gis.content.get(item['id'])
-                site = Site(self._gis, site_item)
-                site.definition['values']['pages'] = [p for p in site.definition['values']['pages'] if p['id']!=self.itemid]
+                # Update the title and slug on the parent sites
+                if self._gis._portal.is_arcgisonline:
+                    site = self._gis.hub.sites.get(item["id"])
+                else:
+                    site = self._gis.sites.get(item["id"])
+                definition = site.definition
+                definition['values']['pages'] = [p for p in definition['values']['pages'] if p['id']!=self.itemid]
                 _renamed_page = {}
                 _renamed_page['id'] = self.itemid
                 _renamed_page['title'] = slug
                 _renamed_page['slug'] = slug
-                site.definition['values']['pages'].append(_renamed_page)
-                site.item.update(item_properties={'text': site.definition})
+                definition['values']['pages'].append(_renamed_page)
+                site.item.update(item_properties={'text': definition})
             #Update the slug on the page
             _page_data['title'] = slug
         return self.item.update(_page_data)
@@ -160,8 +165,15 @@ class Page(OrderedDict):
             page1.update_layout(layout = page_layout)
             >> True
         """
-        #Calling the update layout method for site with this page object
-        Site.update_layout(self, layout)
+        #Deleting the draft file for this site, if exists
+        resources = self.item.resources.list()
+        for resource in resources:
+            if 'draft-' in resource['resource']:
+                path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
+                self.item.resources.remove(file=path)
+        #Update the data of the site
+        self.definition['values']['layout'] = layout._json()
+        return self.item.update(item_properties={'text': self.definition})
  
     def delete(self):
         """
@@ -183,9 +195,13 @@ class Page(OrderedDict):
         linked_sites = self.definition['values']['sites']
         for item in linked_sites:
             site_item = self._gis.content.get(item['id'])
-            site = Site(self._gis, site_item)
-            site.definition['values']['pages'] = [p for p in site.definition['values']['pages'] if p['id']!=self.itemid]
-            site.item.update(item_properties={'text': site.definition})
+            if self._gis._portal.is_arcgisonline:
+                site = self._gis.hub.sites.get(item["id"])
+            else:
+                site = self._gis.sites.get(item["id"])
+            definition = site.definition
+            definition['values']['pages'] = [p for p in definition['values']['pages'] if p['id']!=self.itemid]
+            site_item.update(item_properties={'text': definition})
         #Remove delete protection on page
         self.item.protect(enable=False)
         #Delete page item

@@ -133,9 +133,12 @@ class Site(OrderedDict):
         Returns the groupId for the collaboration group
         """
         try:
-            return self.item.properties['collaborationGroupId']
+            return self.item.properties["collaborationGroupId"]
         except:
-            return self.initiative.collab_group_id
+            if self._gis.hub._hub_enabled:
+                return self.initiative.collab_group_id
+            else:
+                return None
 
     @property
     def catalog_groups(self):
@@ -239,55 +242,59 @@ class Site(OrderedDict):
         #In case site definition is empty
         except:
             pass
-        #Delete enterprise site
-        if not self._gis._portal.is_arcgisonline:
-            #Fetch Enterprise Site Collaboration group
-            _collab_group = None
-            try:
-                _collab_groupId = self.item.properties['collaborationGroupId']
-                _collab_group = self._gis.groups.get(_collab_groupId)
-                _collab_group.protected = False
-                _collab_group.delete()
-            except:
-                pass
-            #Fetch Content Group
-            _content_groupId = self.item.properties['contentGroupId']
-            _content_group = self._gis.groups.get(_content_groupId)
-            #Disable delete protection on groups and site
+        # Fetch Site Collaboration group if exists
+        _collab_group = None
+        try:
+            _collab_group_id = self.collab_group_id
+            _collab_group = self._gis.groups.get(_collab_group_id)
+            _collab_group.protected = False
+            _collab_group.delete()
+        except:
+            pass
+        # Fetch Content Group
+        _content_group_id = self.content_group_id
+        _content_group = self._gis.groups.get(_content_group_id)
+        # Disable delete protection on groups and site
+        try:
             _content_group.protected = False
             self.item.protect(enable=False)
-            #Delete groups, site and initiative
+            # Delete groups, site
             _content_group.delete()
+        except:
+            pass
+        #Delete enterprise site
+        if not self._gis._portal.is_arcgisonline:
             return self.item.delete()
-        #Deleting hub sites
-        if self.item is not None:
-            #Fetch site data
-            _site_data = self.definition
-            #Disable delete protection on site
-            self.item.protect(enable=False)
-            #Fetch siteId from domain entry
-            _HEADERS = {
-                'Content-Type': 'application/json', 
-                'Authorization': self._gis._con.token, 
-                'Referer': self._gis._con._referer
-            }
-            path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
-            _site_domain = requests.get(path, headers = _HEADERS)
-            _siteId = _site_domain.json()[0]['id']
-            #Delete domain entry
-            _HEADERS = {
-                'Content-Type': 'application/json', 
-                'Authorization': self._gis._con.token, 
-                'Referer': self._gis._con._referer
-            }
-            path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
-            _delete_domain = requests.delete(path, headers = _HEADERS)
-            #if deletion is successful
-            if _delete_domain.status_code==200:
-                #Delete site item
-                return self.item.delete()
-            else:
-                return _delete_domain.content
+        else:
+            #Deleting hub sites
+            if self.item is not None:
+                #Fetch site data
+                _site_data = self.definition
+                #Disable delete protection on site
+                self.item.protect(enable=False)
+                #Fetch siteId from domain entry
+                _HEADERS = {
+                    'Content-Type': 'application/json', 
+                    'Authorization': self._gis._con.token, 
+                    'Referer': self._gis._con._referer
+                }
+                path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
+                _site_domain = requests.get(path, headers = _HEADERS)
+                _siteId = _site_domain.json()[0]['id']
+                #Delete domain entry
+                _HEADERS = {
+                    'Content-Type': 'application/json', 
+                    'Authorization': self._gis._con.token, 
+                    'Referer': self._gis._con._referer
+                }
+                path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
+                _delete_domain = requests.delete(path, headers = _HEADERS)
+                #if deletion is successful
+                if _delete_domain.status_code==200:
+                    #Delete site item
+                    return self.item.delete()
+                else:
+                    return _delete_domain.content
 
     def reassign_to(self, target_owner):
         """
@@ -867,6 +874,8 @@ class SiteManager(object):
                 collab_group =  self._gis.groups.create_from_dict(_collab_group_dict)
                 collab_group.protected = True
                 collab_group_id = collab_group.id
+            else:
+                collab_group_id = None
             #Protect groups from accidental deletion
             content_group.protected = True
             _item_dict = {

@@ -226,20 +226,21 @@ class Initiative(OrderedDict):
                 _collab_group.delete()
             except:
                 pass
-            #Fetch Content Group
-            _content_group = self._gis.groups.get(self.content_group_id)
-            #Fetch Followers Group for Hub Premium initiatives
-            if self._hub._hub_enabled:
-                _followers_group = self._gis.groups.get(self.followers_group_id)
-            #Disable delete protection on groups
+            # Fetch Content Group and delete
             try:
+                _content_group = self._gis.groups.get(self.content_group_id)
                 _content_group.protected = False
+                _content_group.delete()
+            except:
+                pass
+            # Fetch Followers Group and delete
+            try:
+                _followers_group = self._gis.groups.get(self.followers_group_id)
                 _followers_group.protected = False
                 _followers_group.delete()
             except:
                 pass
-            #Delete groups and initiative
-            _content_group.delete()
+            # Delete initiative
             return self.item.delete()
 
     def reassign_to(self, target_owner):
@@ -435,7 +436,7 @@ class InitiativeManager(object):
     call methods on this 'initiatives' object to manipulate (add, get, search, etc) initiatives.
     """
     
-    def __init__(self, hub, initiative=None):
+    def __init__(self, hub):
         self._hub = hub
         self._gis = self._hub.gis
           
@@ -523,7 +524,7 @@ class InitiativeManager(object):
             followers_group.protected = True
             _item_dict['properties']['followersGroupId'] = followers_group.id
                
-        #Create initiative and share it with collaboration group
+        #Create initiative and share it with collaboration group if exists
         item =  self._gis.content.add(_item_dict, owner=self._gis.users.me.username)
         try:
             item.share(groups=[collab_group])
@@ -610,7 +611,7 @@ class InitiativeManager(object):
         try:
             site = origin_hub.sites.get(initiative.site_id)
         except:
-            raise Exception("Please provide origin_hub of the initiative object, if the initiative is not publicly shared")
+            raise Exception("Please provide origin_hub of the initiative object, if the initiative is not publicly shared.")
         #Create new initiative if destination hub is premium
         if self._hub._hub_enabled:
             #new initiative
@@ -642,7 +643,7 @@ class InitiativeManager(object):
         else:
             raise TypeError("Item is not a valid initiative or is inaccessible.")
     
-    def search(self, scope=None, title=None, owner=None, created=None, modified=None, tags=None):
+    def search(self, title=None, owner=None, created=None, modified=None, tags=None):
         """ 
         Searches for initiatives.
         ===============     ====================================================================
@@ -678,6 +679,9 @@ class InitiativeManager(object):
             query += ' AND modified:'+modified
         if tags!=None:
             query += ' AND tags:'+tags
+
+        #Search
+        items = self._gis.content.search(query=query, max_items=5000)
             
         #Return searched initiatives
         for item in items:
