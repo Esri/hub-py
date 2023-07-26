@@ -178,8 +178,8 @@ class Initiative(OrderedDict):
         """
         Fetches the list of followers for initiative. 
         """
-        g = self._gis.groups.get(self.followers_group_id)
-        return g.get_members()
+        _followers_group = self._gis.groups.get(self.followers_group_id)
+        return _followers_group.get_members()
 
     def add_content(self, items_list):
         """
@@ -191,12 +191,24 @@ class Initiative(OrderedDict):
         items_list                Required list. A list of Item or item ids to add to the initiative
         =====================     ====================================================================
         """
-        #Fetch Initiative Collaboration group
-        _collab_group = self._gis.groups.get(self.collab_group_id)
-        #Fetch Content Group
-        _content_group = self._gis.groups.get(self.content_group_id)
-        #share items with groups
-        return self._gis.content.share_items(items_list, groups=[_collab_group, _content_group])
+        # If input list is of item_ids, generate a list of corresponding items
+        if type(items_list[0]) == str:
+            items = [self._gis.content.get(item_id) for item_id in items_list]
+        else:
+            items = items_list
+        # Fetch existing sharing privileges for each item, to retain them after adding to content library
+        for item in items:
+            sharing = item.shared_with
+            everyone = sharing["everyone"]
+            org = sharing["org"]
+            groups = sharing["groups"]
+            # add current initiative's content group to list of groups to share to
+            groups.append(self.content_group_id)
+            # share item to this group
+            status = item.share(everyone=everyone, org=org, groups=groups)
+            if status["results"][0]["success"] == False:
+                return status
+        return status
 
     def delete(self):
         """
@@ -683,7 +695,7 @@ class InitiativeManager(object):
         #Search
         items = self._gis.content.search(query=query, max_items=5000)
             
-        #Return searched initiatives
+        #Return searched initiat    ives
         for item in items:
             initiativelist.append(Initiative(self._hub, item))
         return initiativelist

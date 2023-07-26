@@ -5,7 +5,6 @@ from arcgishub.pages import Page, PageManager
 from datetime import datetime
 from collections import OrderedDict
 from urllib.parse import urlparse
-import requests
 import json
 import os
 
@@ -172,19 +171,31 @@ class Site(OrderedDict):
     def add_content(self, items_list):
         """
         Adds a batch of items to the site content library.
-        
+
         =====================     ====================================================================
-        **Argument**              **Description**
+        **Parameter**              **Description**
         ---------------------     --------------------------------------------------------------------
-        items_list                Required list. A list of Item or item ids to add to the initiative
+        items_list                Required list. A list of Item or item ids to add to the site.
         =====================     ====================================================================
         """
-        #Fetch Initiative Collaboration group
-        _collab_group = self._gis.groups.get(self.collab_group_id)
-        #Fetch Content Group
-        _content_group = self._gis.groups.get(self.content_group_id)
-        #share items with groups
-        return self._gis.content.share_items(items_list, groups=[_collab_group, _content_group])
+        # If input list is of item_ids, generate a list of corresponding items
+        if type(items_list[0]) == str:
+            items = [self._gis.content.get(item_id) for item_id in items_list]
+        else:
+            items = items_list
+        # Fetch existing sharing privileges for each item, to retain them after adding to content library
+        for item in items:
+            sharing = item.shared_with
+            everyone = sharing["everyone"]
+            org = sharing["org"]
+            groups = sharing["groups"]
+            # add current site's content group to list of groups to share to
+            groups.append(self.content_group_id)
+            # share item to this group
+            status = item.share(everyone=everyone, org=org, groups=groups)
+            if status["results"][0]["success"] == False:
+                return status
+        return status
 
     def add_catalog_group(self, group_id):
         """
@@ -272,26 +283,19 @@ class Site(OrderedDict):
                 _site_data = self.definition
                 #Disable delete protection on site
                 self.item.protect(enable=False)
-                #Fetch siteId from domain entry
-                _HEADERS = {
-                    'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token, 
-                    'Referer': self._gis._con._referer
-                }
-                path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
-                _site_domain = requests.get(path, headers = _HEADERS)
-                _siteId = _site_domain.json()[0]['id']
-                #Delete domain entry
-                _HEADERS = {
-                    'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token, 
-                    'Referer': self._gis._con._referer
-                }
-                path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
-                _delete_domain = requests.delete(path, headers = _HEADERS)
-                #if deletion is successful
-                if _delete_domain.status_code==200:
-                    #Delete site item
+                # Fetch siteId from domain entry
+                path = "https://hub.arcgis.com/api/v3/domains?siteId=" + self.itemid
+                _site_domain = self._gis._con.get(path=path)
+                _siteId = _site_domain[0]["id"]
+                # Delete domain entry
+                session = self._gis._con._session
+                headers = {k: v for k, v in session.headers.items()}
+                headers["Content-Type"] = "application/json"
+                headers["Authorization"] = "X-Esri-Authorization"
+                path = "https://hub.arcgis.com/api/v3/domains/" + _siteId
+                _delete_domain = session.delete(url=path, headers=headers)
+                if _delete_domain.status_code == 200:
+                    # Delete site item
                     return self.item.delete()
                 else:
                     return _delete_domain.content
@@ -446,71 +450,82 @@ class Site(OrderedDict):
             for key, value in site_properties.items():
                 _site_data[key] = value
         if subdomain:
-            #format subdomain if needed
-            subdomain = subdomain.replace(' ', '-').lower()
+            # format subdomain if needed
+            subdomain = subdomain.replace(" ", "-").lower()
             #Domain manipulation for new subdomain
             if self._gis._portal.is_arcgisonline:
                 #Check for length of domain
                 if len(subdomain + '-' + self._gis.properties['urlKey']) > 63:
                     _num = 63 - len(self._gis.properties['urlKey'])
                     raise ValueError('Requested url too long. Please enter a subdomain shorter than %d characters' %_num)
-                #Fetch siteId from domain entry
-                _HEADERS = {
-                    'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token, 
-                    'Referer': self._gis._con._referer
-                }
-                path = 'https://hub.arcgis.com/utilities/domains?siteId='+self.itemid
-                _site_domain = requests.get(path, headers = _HEADERS)
-                _siteId = _site_domain.json()[0]['id']
-                client_key = _site_domain.json()[0]['clientKey']
-                #Delete old domain entry
-                _HEADERS = {
-                    'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token, 
-                    'Referer': self._gis._con._referer
-                }
-                path = 'https://hub.arcgis.com/utilities/domains/'+_siteId
-                _delete_domain = requests.delete(path, headers = _HEADERS)
-                #if deletion is successful
-                if _delete_domain.status_code==200:
-                    #Create new domain entry
+                # Fetch siteId from domain entry
+                path = "https://hub.arcgis.com/api/v3/domains?siteId=" + self.itemid
+                _site_domain = self._gis._con.get(path=path)
+                _siteId = _site_domain[0]["id"]
+                client_key = _site_domain[0]["clientKey"]
+                # Delete old domain entry
+                session = self._gis._con._session
+                headers = {k: v for k, v in session.headers.items()}
+                headers["Content-Type"] = "application/json"
+                headers["Authorization"] = "X-Esri-Authorization"
+                path = "https://hub.arcgis.com/api/v3/domains/" + _siteId
+                _delete_domain = session.delete(url=path, headers=headers)
+                # if deletion is successful
+                if _delete_domain.status_code == 200:
+                    # Create new domain entry
 
-                    #Create domain entry for new site
+                    # Create domain entry for new site
                     _HEADERS = {
-                        'Content-Type': 'application/json', 
-                        'Authorization': self._gis._con.token,
-                        'Referer': self._gis._con._referer
+                        "Content-Type": "application/json",
+                        "Authorization": "X-Esri-Authorization",
+                        "Referer": self._gis._con._referer,
                     }
                     _body = {
-                        'hostname': subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com', 
-                        'siteId': self.item.id, 
-                        'siteTitle': self.title, 
-                        'clientKey': client_key, 
-                        'orgId': self._gis.properties.id, 
-                        'orgKey': self._gis.properties['urlKey'], 
-                        'orgTitle':self._gis.properties['name'],
-                        'sslOnly':True
+                        "hostname": subdomain
+                        + "-"
+                        + self._gis.properties["urlKey"]
+                        + ".hub.arcgis.com",
+                        "siteId": self.item.id,
+                        "siteTitle": self.title,
+                        "orgId": self._gis.properties.id,
+                        "orgKey": self._gis.properties["urlKey"],
+                        "orgTitle": self._gis.properties["name"],
+                        "sslOnly": True,
                     }
-                    path = 'https://hub.arcgis.com/utilities/domains'
-                    _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
-                    if _new_domain.status_code==200:
-                        #define new domain and hostname
-                        hostname = subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
+                    headers = {k: v for k, v in session.headers.items()}
+                    headers["Content-Type"] = "application/json"
+                    headers["Authorization"] = "X-Esri-Authorization"
+                    _new_domain = session.post(
+                        url="https://hub.arcgis.com/api/v3/domains",
+                        data=json.dumps(_body),
+                        headers=headers,
+                    )
+                    if _new_domain.status_code == 200:
+                        # define new domain and hostname
+                        hostname = (
+                            subdomain
+                            + "-"
+                            + self._gis.properties["urlKey"]
+                            + ".hub.arcgis.com"
+                        )
                         domain = self._gis.url[:8] + hostname
-                        #update initiative item 
-                        self.initiative.item.update(item_properties={'url':domain})
-                        #update site item and data
+                        _client_key = _new_domain.json()["clientKey"]
+                        # update initiative item
+                        if self._gis.hub._hub_enabled:
+                            self.initiative.item.update(item_properties={"url": domain})
+                        # update site item and data
                         data = self.definition
-                        data['values']['defaultHostname'] = hostname
-                        data['values']['subdomain'] = subdomain
-                        data['values']['internalUrl'] = hostname
-                        if self.item.update(item_properties={'url':domain, 'text':data}):
+                        data["values"]["defaultHostname"] = hostname
+                        data["values"]["subdomain"] = subdomain
+                        data["values"]["internalUrl"] = hostname
+                        if self.item.update(
+                            item_properties={"url": domain, "text": data}
+                        ):
                             return domain
-                    #if creating new domain entry fails
+                    # if creating new domain entry fails
                     else:
                         return _new_domain.content
-                #if deleting old domain entry fails
+                # if deleting old domain entry fails
                 else:
                     return _delete_domain.content
             #For enterprise sites
@@ -528,6 +543,7 @@ class Site(OrderedDict):
                 data['values']['defaultHostname'] = hostname
                 data['values']['subdomain'] = subdomain
                 data['values']['internalUrl'] = hostname
+                data["values"]["clientId"] = _client_key
                 if self.item.update(item_properties={'typeKeywords':typeKeywords, 'url':domain, 'text':data}):
                     return domain
         return self.item.update(_site_data)
@@ -559,15 +575,14 @@ class Site(OrderedDict):
             
             >> True
         """
-        #Deleting the draft file for this site, if exists
+        # Deleting the draft file for this site, if exists
         resources = self.item.resources.list()
         for resource in resources:
-            if 'draft-' in resource['resource']:
-                path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
-                self.item.resources.remove(file=path)
-        #Update the data of the site
-        self.definition['values']['layout'] = layout._json()
-        return self.item.update(item_properties={'text': self.definition})
+            if "draft-" in resource["resource"]:
+                self.item.resources.remove(file=resource["resource"])
+        # Update the data of the site
+        self.definition["values"]["layout"] = layout._json()
+        return self.item.update(item_properties={"text": self.definition})
 
     def update_theme(self, theme):
         """ Updates the theme of the site. 
@@ -598,9 +613,8 @@ class Site(OrderedDict):
         #Deleting the draft file for this site, if exists
         resources = self.item.resources.list()
         for resource in resources:
-            if 'draft-' in resource['resource']:
-                path = self._gis.url+'/sharing/rest/content/items/'+self.itemid+'/resources/'+resource['resource']+'?token='+self._gis._con.token
-                self.item.resources.remove(file=path)
+            if "draft-" in resource["resource"]:
+                self.item.resources.remove(file=resource["resource"])
         #Update the data of the site
         self.definition['values']['theme'] = theme._json()
         return self.item.update(item_properties={'text': self.definition})
@@ -628,81 +642,100 @@ class SiteManager(object):
 
         if self._gis._portal.is_arcgisonline:
 
-            #register site as an app
-            _app_dict = site.register(app_type='browser', redirect_uris=[site.url])
-            client_key = _app_dict['client_id']
-
             #Check for length of domain
             if len(subdomain + '-' + self._gis.properties['urlKey']) > 63:
                 _num = 63 - len(self._gis.properties['urlKey'])
                 raise ValueError('Requested url too long. Please enter a name shorter than %d characters' %_num)
 
-            #Create domain entry for new site
+            session = self._gis._con._session
+            # Create domain entry for new site
             _HEADERS = {
-                    'Content-Type': 'application/json', 
-                    'Authorization': self._gis._con.token,
-                    'Referer': self._gis._con._referer
-                    }
+                "Content-Type": "application/json",
+                "Authorization": "X-Esri-Authorization",
+                "Referer": self._gis._con._referer,
+            }
             _body = {
-                'hostname': subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com', 
-                'siteId': site.id, 
-                'siteTitle': site.title, 
-                'clientKey': client_key, 
-                'orgId': self._gis.properties.id, 
-                'orgKey': self._gis.properties['urlKey'], 
-                'orgTitle':self._gis.properties['name'],
-                'sslOnly':True
-                }
-            path = 'https://hub.arcgis.com/utilities/domains'
-            _new_domain = requests.post(path, headers = _HEADERS, data=json.dumps(_body))
-            if _new_domain.status_code==200:
-                _siteId = _new_domain.json()['id']
+                "hostname": subdomain
+                + "-"
+                + self._gis.properties["urlKey"]
+                + ".hub.arcgis.com",
+                "siteId": site.id,
+                "siteTitle": site.title,
+                "orgId": self._gis.properties.id,
+                "orgKey": self._gis.properties["urlKey"],
+                "orgTitle": self._gis.properties["name"],
+                "sslOnly": True,
+            }
+
+            headers = {k: v for k, v in session.headers.items()}
+            headers["Content-Type"] = "application/json"
+            headers["Authorization"] = "X-Esri-Authorization"
+            _new_domain = session.post(
+                url="https://hub.arcgis.com/api/v3/domains",
+                data=json.dumps(_body),
+                headers=headers,
+            )
+            if _new_domain.status_code == 200:
+                _siteId = _new_domain.json()["id"]
+                _client_key = _new_domain.json()["clientKey"]
             else:
                 return _new_domain
         else:
-            #Check for length of domain
+            # Check for length of domain
             if len(subdomain) > 63:
-                raise ValueError('Requested url too long. Please enter a name shorter than 63 characters')
+                raise ValueError(
+                    "Requested url too long. Please enter a name shorter than 63 characters"
+                )
 
-
-        #for group_id in group_ids:
+        # for group_id in group_ids:
         try:
-            site_data['catalog']['groups'].append(content_group_id)
+            site_data["catalog"]["groups"].append(content_group_id)
         except:
-            site_data['values']['groups'].append(content_group_id)
-            site_data['values']['uiVersion'] = "2.3"
+            site_data["values"]["groups"].append(content_group_id)
+            site_data["values"]["uiVersion"] = "2.3"
         if self._gis._portal.is_arcgisonline:
-            site_data['values']['theme']['globalNav'] = {}
+            site_data["values"]["theme"]["globalNav"] = {}
             try:
-                site_data['values']['theme']['globalNav'] = self._gis.properties['portalProperties']['sharedTheme']['header']
+                site_data["values"]["theme"]["globalNav"] = self._gis.properties[
+                    "portalProperties"
+                ]["sharedTheme"]["header"]
             except KeyError:
-                raise KeyError("Hub does not exist or is inaccessible.")
-        site_data['values']['title'] = site.title
-        site_data['values']['layout']['header']['component']['settings']['title'] = site.title
-        site_data['values']['collaborationGroupId'] = collab_group_id
-        site_data['values']['subdomain'] = subdomain
-        site_data['values']['defaultHostname'] = site.url
-        site_data['values']['updatedBy'] = self._gis.users.me.username
+                site_data["values"]["theme"]["globalNav"] = {
+                    "background": "#fff",
+                    "text": "#000000",
+                }
+        site_data["values"]["title"] = site.title
+        site_data["values"]["layout"]["header"]["component"]["settings"][
+            "title"
+        ] = site.title
+        site_data["values"]["collaborationGroupId"] = collab_group_id
+        site_data["values"]["subdomain"] = subdomain
+        site_data["values"]["defaultHostname"] = site.url
+        site_data["values"]["updatedBy"] = self._gis.users.me.username
         if self._gis._portal.is_arcgisonline:
-            site_data['values']['siteId'] = _siteId
-            site_data['values']['clientId'] = client_key
+            site_data["values"]["siteId"] = _siteId
+            site_data["values"]["clientId"] = _client_key
         else:
-            site_data['values']['clientId'] = 'arcgisonline'
-        #Add collaboration group to gallery card only if it exists in the usual spot
+            site_data["values"]["clientId"] = "arcgisonline"
+        # Add collaboration group to gallery card only if it exists in the usual spot
         try:
-            site_data['values']['layout']['sections'][6]['rows'][1]['cards'][0]['component']['settings']['selectedGroups'][0]['id'] = collab_group_id
+            site_data["values"]["layout"]["sections"][6]["rows"][1]["cards"][0][
+                "component"
+            ]["settings"]["selectedGroups"][0]["id"] = collab_group_id
         except:
             pass
-        #Link follow button to current initiative only if it exists in the usual spot
-        if self._hub._hub_enabled:
+        # Link follow button to current initiative only if it exists in the usual spot
+        if self._gis._portal.is_arcgisonline and self._hub._hub_enabled:
             try:
-                site_data['values']['layout']['sections'][8]['rows'][1]['cards'][0]['component']['settings']['initiativeId'] = self.initiative.itemid
+                site_data["values"]["layout"]["sections"][8]["rows"][1]["cards"][0][
+                    "component"
+                ]["settings"]["initiativeId"] = self.initiative.itemid
             except:
                 pass
-        site_data['values']['map'] = self._gis.properties['defaultBasemap']
-        site_data['values']['defaultExtent'] = self._gis.properties['defaultExtent']
+        site_data["values"]["map"] = self._gis.properties["defaultBasemap"]
+        site_data["values"]["defaultExtent"] = self._gis.properties["defaultExtent"]
 
-        #site_data['values']['theme'] = self._gis.properties['portalProperties']['sharedTheme']
+        # site_data['values']['theme'] = self._gis.properties['portalProperties']['sharedTheme']
         return site_data
 
     def add(self, title, subdomain=None):
@@ -768,10 +801,17 @@ class SiteManager(object):
             #Domain manipulation
             domain = self._gis.url[:8] + subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
             _request_url = 'https://hub.arcgis.com/utilities/domains/'+domain[8:]
-            _response = requests.get(_request_url)
+            session = self._gis._con._session
+            headers = {k: v for k, v in session.headers.items()}
+            headers["Content-Type"] = "application/json"
+            headers["Authorization"] = "X-Esri-Authorization"
+            response = session.get(
+                url=f"https://hub.arcgis.com/api/v3/domains/" + domain[8:],
+                headers=headers,
+            )
         
             #Check if domain doesn't exist
-            if _response.status_code==404:
+            if response.status_code==404:
                 pass
             else:
             #If exists check if counter needs updating and update it
@@ -1125,18 +1165,17 @@ class SiteManager(object):
         """
         #Check if Hub(GIS) is an ArcGIS Online instance
         if self._gis._portal.is_arcgisonline:
-            if 'http' in domain_url:
+            if "http" in domain_url:
                 domain_url = urlparse(domain_url).netloc
-            path = 'https://hub.arcgis.com/utilities/domains/'+domain_url
-            #fetch site itemid from domain service
-            _HEADERS = {
-                'Content-Type': 'application/json', 
-                'Authorization': self._gis._con.token, 
-                'Referer': self._gis._con._referer
-            }
-            _site_domain = requests.get(path, headers = _HEADERS)
+            path = "https://hub.arcgis.com/api/v3/domains/" + domain_url
+            # fetch site itemid from domain service
+            session = self._gis._con._session
+            headers = {k: v for k, v in session.headers.items()}
+            headers["Content-Type"] = "application/json"
+            headers["Authorization"] = "X-Esri-Authorization"
+            _site_domain = self._gis._con.get(path, headers=headers)
             try:
-                siteId = _site_domain.json()['siteId']
+                siteId = _site_domain["siteId"]
             except KeyError:
                 raise Exception("Domain record not found. Please check your domain_url.")
             return self.get(siteId)
