@@ -163,7 +163,7 @@ class Event(OrderedDict):
         _group.protected = False
         _group.delete()
         params = {'f': 'json', 'objectIds': self.event_id, 'token': self._gis._con.token}
-        delete_event = self._gis._con.post(path='https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/deleteFeatures', postdata=params)
+        delete_event = self._gis._con.post(path=f"https://{self._hub._hub_environment}/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/deleteFeatures", postdata=params)
         return delete_event['deleteResults'][0]['success']
         
     def update(self, event_properties):
@@ -194,7 +194,7 @@ class Event(OrderedDict):
         event_data = [_feature]
 
         #Update event
-        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/updateFeatures'
+        url = f"https://{self._hub._hub_environment}/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/updateFeatures"
         params = {
             'f': 'json', 
             'features': event_data,
@@ -220,7 +220,7 @@ class EventManager(object):
         Fetches all events for particular hub.
         """
         events = []
-        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query'
+        url = f"https://{self._hub._hub_environment}/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/query"
         params = {
             'f' :'json', 
             'outFields': '*', 
@@ -360,7 +360,7 @@ class EventManager(object):
         _feature["attributes"] = event_properties
         _feature["geometry"] = geometry
         event_data = [_feature]
-        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/addFeatures'
+        url = f"https://{self._hub._hub_environment}/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/addFeatures"
         params = {
             'f': 'json', 
             'features': event_data,
@@ -419,7 +419,7 @@ class EventManager(object):
             The event object.
         
         """
-        url = 'https://hub.arcgis.com/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/'+str(event_id)
+        url = f"https://{self._hub._hub_environment}/api/v3/events/'+self._hub.enterprise_org_id+'/Hub Events/FeatureServer/0/"+str(event_id)
         params = {'f':'json', 'token':self._gis._con.token}
         feature = self._gis._con.get(url, params)
         return Event(self._gis, feature['feature'])

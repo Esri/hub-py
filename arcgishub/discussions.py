@@ -17,7 +17,6 @@ class Post(OrderedDict):
         self._gis = self._hub.gis
 
         self.postProperties = postProperties
-        self.env = "qa" # temporary holder, we will change this later as well
 
         # used throughout all requests
         self.header = {
@@ -166,7 +165,7 @@ class Post(OrderedDict):
         if appInfo:
             payload['appInfo'] = appInfo
         
-        url = 'https://hub.arcgis.com/api/discussions/v1/posts/{}'.format(self.id)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{self.id}"
         res = requests.patch(url, data=json.dumps(payload), headers=self.header)
         return Post(self._hub, res.json())
 
@@ -183,7 +182,7 @@ class Post(OrderedDict):
         post.delete()
         >> True
         """
-        url = 'https://hub.arcgis.com/api/discussions/v1/posts/{}'.format(self.id)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{self.id}"
         res = requests.delete(url, headers=self.header)
         
         if res.json()['success']:
@@ -217,7 +216,7 @@ class Post(OrderedDict):
             'value': value
         }
 
-        url = 'https://hub.arcgis.com/api/discussions/v1/reactions'.format(self.env)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/reactions"
         res = requests.post(url, headers=self.header, data=json.dumps(payload))
 
         if res.json()['id']:
@@ -247,7 +246,7 @@ class Post(OrderedDict):
         >> True
         """
         
-        url = 'https://hub.arcgis.com/api/discussions/v1/reactions/{}'.format(id)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/reactions/{id}"
         res = requests.delete(url, headers=self.header)
 
         if res.json()['success']:
@@ -259,7 +258,6 @@ class PostManager(object):
     Helper class for managing posts within a discussion. 
     """
     def __init__(self, hub, post=None):
-        self.env = "qa"
         if post:
             self.post = post
 
@@ -297,9 +295,9 @@ class PostManager(object):
             parameters = {
                 'num': max_posts
             }
-            res = requests.get('https://hub.arcgis.com/api/discussions/v1/posts'.format(self.env), headers=self.header, params=parameters)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", headers=self.header, params=parameters)
         else:
-           res = requests.get('https://hub.arcgis.com/api/discussions/v1/posts'.format(self.env), headers=self.header) 
+           res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", headers=self.header) 
 
         parsed_posts = res.json()['items']
     
@@ -323,7 +321,7 @@ class PostManager(object):
         post = myHub.discussions.posts.get('itemid12345')
         >> <title:"My Title" creator:prod-pre-hub created:2021-09-04T04:00:18.957Z>
         """
-        res = requests.get('https://hub.arcgis.com/api/discussions/v1/posts/{}'.format(id), headers=self.header)
+        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{id}", headers=self.header)
         postProperties = res.json()
         return Post(self._hub, postProperties)
 
@@ -390,7 +388,7 @@ class PostManager(object):
             if key not in non_optional:
                 payload[key] = value
 
-        res = requests.post('https://hub.arcgis.com/api/discussions/v1/posts', data=json.dumps(payload), headers=self.header)    
+        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", data=json.dumps(payload), headers=self.header)    
 
         # return post object is found, if not raise Exception
         try:
@@ -406,7 +404,6 @@ class Channel(OrderedDict):
     """
     def __init__(self, hub, channelProperties):
         self.channelProperties = channelProperties
-        self.env = "qa" # we will change this below to connect with hub accounts later on
 
         self._hub = hub
         self._gis = self._hub.gis
@@ -569,7 +566,7 @@ class Channel(OrderedDict):
             payload['allowedReactions'] = allowedReactions
 
         
-        url = 'https://hub.arcgis.com/api/discussions/v1/channels/{}'.format(self.id)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{self.id}"
         res = requests.patch(url, data=json.dumps(payload), headers=self.header)
         return Channel(self._hub, res.json())
 
@@ -583,7 +580,7 @@ class Channel(OrderedDict):
         channel.delete()
         >> True
         """
-        url = 'https://hub.arcgis.com/api/discussions/v1/channels/{}'.format(self.id)
+        url = f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{self.id}"
         res = requests.delete(url, headers=self.header)
         
         if res.json()['success']:
@@ -595,7 +592,6 @@ class ChannelManager(object):
     Helper class for managing channels within a discussion. 
     """
     def __init__(self, hub, channel=None):
-        self.env = "qa"
         if channel:
             self.channel = channel
 
@@ -632,9 +628,9 @@ class ChannelManager(object):
             parameters = {
                 'num': max_channels
             }
-            res = requests.get('https://hub.arcgis.com/api/discussions/v1/channels'.format(self.env), headers=self.header, params=parameters)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", headers=self.header, params=parameters)
         else: 
-            res = requests.get('https://hub.arcgis.com/api/discussions/v1/channels'.format(self.env), headers=self.header)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", headers=self.header)
         
         parsed_channels = res.json()['items']
     
@@ -659,7 +655,7 @@ class ChannelManager(object):
         >> <channel_id:"itemid12345" access:"public" groups:[] creator:"prod-pre-hub">
         """
 
-        res = requests.get('https://hub.arcgis.com/api/discussions/v1/channels/{}'.format(id), headers=self.header)
+        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{id}", headers=self.header)
         channelProperties = res.json()
         return Channel(self._hub, channelProperties)
 
@@ -724,7 +720,7 @@ class ChannelManager(object):
             if key not in non_optional:
                 payload[key] = value
 
-        res = requests.post('https://hub.arcgis.com/api/discussions/v1/channels'.format(self.env), data=json.dumps(payload), headers=self.header)
+        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", data=json.dumps(payload), headers=self.header)
 
         # return Channel object is found, if not raise Exception
         try:
@@ -801,7 +797,7 @@ class Reaction(OrderedDict):
         >> True
         """
 
-        res = requests.delete('https://hub.arcgis.com/api/discussions/v1/reactions/{}'.format(id), headers=self.header)        
+        res = requests.delete(f"https://{self._hub._hub_environment}/api/discussions/v1/reactions/{id}", headers=self.header)        
         if res.json()['success']:
             return True
         return False

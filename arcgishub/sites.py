@@ -284,7 +284,7 @@ class Site(OrderedDict):
                 #Disable delete protection on site
                 self.item.protect(enable=False)
                 # Fetch siteId from domain entry
-                path = "https://hub.arcgis.com/api/v3/domains?siteId=" + self.itemid
+                path = f"https://{self._hub._hub_environment}/api/v3/domains?siteId=" + self.itemid
                 _site_domain = self._gis._con.get(path=path)
                 _siteId = _site_domain[0]["id"]
                 # Delete domain entry
@@ -292,7 +292,7 @@ class Site(OrderedDict):
                 headers = {k: v for k, v in session.headers.items()}
                 headers["Content-Type"] = "application/json"
                 headers["Authorization"] = "X-Esri-Authorization"
-                path = "https://hub.arcgis.com/api/v3/domains/" + _siteId
+                path = f"https://{self._hub._hub_environment}/api/v3/domains/" + _siteId
                 _delete_domain = session.delete(url=path, headers=headers)
                 if _delete_domain.status_code == 200:
                     # Delete site item
@@ -402,11 +402,12 @@ class Site(OrderedDict):
         groups = self.catalog_groups
         all_content = []
         for group_id in groups:
-            group = self._gis.groups.get(group_id)
-            try:
+            try:  # user may not have access to this group
+                group = self._gis.groups.get(group_id)
                 all_content = all_content + group.content()
-            except AttributeError:
+            except: # AttributeError:
                 pass
+
         #eliminate duplicate items
         result = [i for n, i in enumerate(all_content) if i not in all_content[:n]]
         if query!=None:
@@ -459,7 +460,7 @@ class Site(OrderedDict):
                     _num = 63 - len(self._gis.properties['urlKey'])
                     raise ValueError('Requested url too long. Please enter a subdomain shorter than %d characters' %_num)
                 # Fetch siteId from domain entry
-                path = "https://hub.arcgis.com/api/v3/domains?siteId=" + self.itemid
+                path = f"https://{self._hub._hub_environment}/api/v3/domains?siteId=" + self.itemid
                 _site_domain = self._gis._con.get(path=path)
                 _siteId = _site_domain[0]["id"]
                 client_key = _site_domain[0]["clientKey"]
@@ -468,7 +469,7 @@ class Site(OrderedDict):
                 headers = {k: v for k, v in session.headers.items()}
                 headers["Content-Type"] = "application/json"
                 headers["Authorization"] = "X-Esri-Authorization"
-                path = "https://hub.arcgis.com/api/v3/domains/" + _siteId
+                path = f"https://{self._hub._hub_environment}/api/v3/domains/" + _siteId
                 _delete_domain = session.delete(url=path, headers=headers)
                 # if deletion is successful
                 if _delete_domain.status_code == 200:
@@ -484,7 +485,7 @@ class Site(OrderedDict):
                         "hostname": subdomain
                         + "-"
                         + self._gis.properties["urlKey"]
-                        + ".hub.arcgis.com",
+                        + f".{self._hub._hub_environment}",
                         "siteId": self.item.id,
                         "siteTitle": self.title,
                         "orgId": self._gis.properties.id,
@@ -496,7 +497,7 @@ class Site(OrderedDict):
                     headers["Content-Type"] = "application/json"
                     headers["Authorization"] = "X-Esri-Authorization"
                     _new_domain = session.post(
-                        url="https://hub.arcgis.com/api/v3/domains",
+                        url=f"https://{self._hub._hub_environment}/api/v3/domains",
                         data=json.dumps(_body),
                         headers=headers,
                     )
@@ -506,7 +507,7 @@ class Site(OrderedDict):
                             subdomain
                             + "-"
                             + self._gis.properties["urlKey"]
-                            + ".hub.arcgis.com"
+                            + f".{self._hub._hub_environment}"
                         )
                         domain = self._gis.url[:8] + hostname
                         _client_key = _new_domain.json()["clientKey"]
@@ -658,7 +659,7 @@ class SiteManager(object):
                 "hostname": subdomain
                 + "-"
                 + self._gis.properties["urlKey"]
-                + ".hub.arcgis.com",
+                + f".{self._hub._hub_environment}",
                 "siteId": site.id,
                 "siteTitle": site.title,
                 "orgId": self._gis.properties.id,
@@ -671,7 +672,7 @@ class SiteManager(object):
             headers["Content-Type"] = "application/json"
             headers["Authorization"] = "X-Esri-Authorization"
             _new_domain = session.post(
-                url="https://hub.arcgis.com/api/v3/domains",
+                url=f"https://{self._hub._hub_environment}/api/v3/domains",
                 data=json.dumps(_body),
                 headers=headers,
             )
@@ -800,13 +801,13 @@ class SiteManager(object):
             
             #Domain manipulation
             domain = self._gis.url[:8] + subdomain + '-' + self._gis.properties['urlKey'] + '.hub.arcgis.com'
-            _request_url = 'https://hub.arcgis.com/utilities/domains/'+domain[8:]
+            _request_url = f"https://{self._hub._hub_environment}/utilities/domains/"+domain[8:]
             session = self._gis._con._session
             headers = {k: v for k, v in session.headers.items()}
             headers["Content-Type"] = "application/json"
             headers["Authorization"] = "X-Esri-Authorization"
             response = session.get(
-                url=f"https://hub.arcgis.com/api/v3/domains/" + domain[8:],
+                url=f"https://{self._hub._hub_environment}/api/v3/domains/" + domain[8:],
                 headers=headers,
             )
         
@@ -1167,7 +1168,7 @@ class SiteManager(object):
         if self._gis._portal.is_arcgisonline:
             if "http" in domain_url:
                 domain_url = urlparse(domain_url).netloc
-            path = "https://hub.arcgis.com/api/v3/domains/" + domain_url
+            path = f"https://{self._hub._hub_environment}/api/v3/domains/" + domain_url
             # fetch site itemid from domain service
             session = self._gis._con._session
             headers = {k: v for k, v in session.headers.items()}

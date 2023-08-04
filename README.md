@@ -30,17 +30,18 @@ Once installed, test it by launching an instance of Jupyter Notebook and importi
 
 Test if the version has been upgraded by following with the command
 
-``` 
+```python
 import arcgishub
 arcgishub.__version__ 
 ```
+
 
 ### Getting Started
 
 The first step to interacting with `arcgishub` is creating an instance of a Hub and exploring all that it contains.
 For example:
 
-```  
+```python
 from arcgishub import hub
 myHub = hub.Hub("https://cityx.maps.arcgis.com", username, password) # or the url of your ArcGIS Online organization
 initiatives = myHub.initiatives.search()
@@ -59,3 +60,7 @@ Older versions of this API can also be found in the [ArcGIS API for Python](http
 
 
 We encourage you to provide feedback/issues in implementation, under GitHub [issues](https://github.com/esridc/hub-py/issues) for this repo.
+
+### Development
+
+Install requirements: `pip install -r requirements.txt`

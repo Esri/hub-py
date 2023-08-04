@@ -99,12 +99,13 @@ class Hub(object):
         Returns the hub url corresponding to the dev/qa/prod environment.
         """
         url = self.gis.url
+        print(f"_hub_environment: {url}")
         if 'devext' in url:
-            return 'https://hubdev.arcgis.com'
-        elif 'mapsqa' in url:
-            return 'https://hubqa.arcgis.com'
+            return 'hubdev.arcgis.com'
+        elif 'mapsqa' in url or 'qaext' in url: # mapsqa is for orgs, but qaext is for front door
+            return 'hubqa.arcgis.com'
         else:
-            return 'https://hub.arcgis.com'
+            return 'hub.arcgis.com'
             
     @property
     def enterprise_org_id(self):
