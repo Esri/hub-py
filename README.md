@@ -11,7 +11,7 @@ In order to install Python, install the bundle that comes with the Anaconda dist
 
 Execute the following command in the terminal
 
-``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
+``` pip install -e git+https://github.com/esri/hub-py.git#egg=arcgishub ```
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
@@ -22,7 +22,7 @@ Once installed, test it by launching an instance of Jupyter Notebook and importi
 
 Execute the following command in the terminal
 
-``` pip install -e git+https://github.com/esridc/hub-py.git#egg=arcgishub ```
+``` pip install -e git+https://github.com/esri/hub-py.git#egg=arcgishub ```
 
 Once installed, test it by launching an instance of Jupyter Notebook and importing the package
 
@@ -48,19 +48,24 @@ initiatives = myHub.initiatives.search()
 print(initiatives)
 ```
 
-fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esridc/hub-py/wiki) for more information and API reference about the functionality supported.
+fetches a list containing all the initiatives within this Hub. Click [here](https://github.com/esri/hub-py/wiki) for more information and API reference about the functionality supported.
 
 ### User Guides
 
-Example notebooks for using this API to work with your Hub are provided in the [examples](https://github.com/esridc/hub-py/tree/master/examples) directory.
+Example notebooks for using this API to work with your Hub are provided in the [examples](https://github.com/esri/hub-py/tree/master/examples) directory.
 
-If you are working with `arcgishub` >=v2.1.0, you will find the above examples and functionality supported in this API under the [For arcgishub](https://github.com/esridc/hub-py/tree/master/examples/For%20arcgishub) folder.
+If you are working with `arcgishub` >=v2.1.0, you will find the above examples and functionality supported in this API under the [For arcgishub](https://github.com/esri/hub-py/tree/master/examples/For%20arcgishub) folder.
 
-Older versions of this API can also be found in the [ArcGIS API for Python](https://developers.arcgis.com/python/). You can find user guides to access Hub using it, under the [For ArcGIS API for Python](https://github.com/esridc/hub-py/tree/master/examples/For%20ArcGIS%20API%20for%20Python) subdirectory.
-
-
-We encourage you to provide feedback/issues in implementation, under GitHub [issues](https://github.com/esridc/hub-py/issues) for this repo.
+Older versions of this API can also be found in the [ArcGIS API for Python](https://developers.arcgis.com/python/). You can find user guides to access Hub using it, under the [For ArcGIS API for Python](https://github.com/esriesri/hub-py/tree/master/examples/For%20ArcGIS%20API%20for%20Python) subdirectory.
 
 ### Development
 
 Install requirements: `pip install -r requirements.txt`
+
+
+### Reporting issues and feedback
+
+We strongly encourage you to provide feedback and report issues in implementation, under GitHub [issues](https://github.com/esri/hub-py/issues) for this repo. 
+
+Under the `New Issue` button on that page, you will find an option to add a Bug or Enhancement report along with guidelines. Issues reported via our Github repository will be prioritized in subsequent changes.
+Report a bug when you observe unexpected or flawed behavior while working with our API. Report an Enhancement when you would like for a particular Hub object to also support new or improved capabilities within hub-py.
