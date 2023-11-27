@@ -97,6 +97,20 @@ class Post(OrderedDict):
         Returns a property of GeoJSON if post is tied to a geography
         """
         return self.postProperties['geometry']
+    
+    @property
+    def featureGeometry(self):
+        """
+        Returns a property of GeoJSON if post is tied to a featured geography
+        """
+        return self.postProperties['featureGeometry']
+    
+    @property
+    def postType(self):
+        """
+        Returns a string of the type of post.
+        """
+        return self.postProperties['postType']
 
     @property
     def appInfo(self):
@@ -119,7 +133,7 @@ class Post(OrderedDict):
         """
         return self.postProperties['parentId']
 
-    def update(self, body=None, title=None, discussion=None, geometry=None, appInfo=None):
+    def update(self, body=None, title=None, discussion=None, geometry=None, featureGeometry=None, appInfo=None):
         """
         Update a post by providing the fields that need to be updated.
 
@@ -136,6 +150,9 @@ class Post(OrderedDict):
                             datasets, and groups. Example: hub://item/uuid
         ----------------    ---------------------------------------------------------------
         geometry            Optional string. Geometry property of GeoJSON spec. Note that 
+                            the spec requires geometries projected in WGS84.
+        ----------------    ---------------------------------------------------------------
+        featureGeometry     Optional string. Geometry property of GeoJSON spec. Note that 
                             the spec requires geometries projected in WGS84.
         ----------------    ---------------------------------------------------------------
         appInfo             Optional string. Generic field for application specific notes. 
@@ -161,6 +178,9 @@ class Post(OrderedDict):
 
         if geometry:
             payload['geometry'] = geometry
+            
+        if featureGeometry:
+            payload['featureGeometry'] = featureGeometry
 
         if appInfo:
             payload['appInfo'] = appInfo
@@ -344,11 +364,17 @@ class PostManager(object):
         geometry            Optional string. Geometry property of GeoJSON spec. Note that 
                             the spec requires geometries projected in WGS84.
         ----------------    ---------------------------------------------------------------
+        featureGeometry     Optional string. Geometry property of GeoJSON spec. Note that 
+                            the spec requires geometries projected in WGS84.
+        ----------------    ---------------------------------------------------------------
         appInfo             Optional string. Generic field for application specific notes. 
                             For instance, this is used by Urban to encode a "topic" to posts.
         ----------------    ---------------------------------------------------------------
+        postType            Optional string. Type of post. Current options are "text", 
+                            "announcement", "poll", "question"
+        ----------------    ---------------------------------------------------------------
         channelId           Required when not using access and groups. Specifies a channel 
-                            that the post belongs to.
+                            that the post belongs to. Will be required with V2.
         ----------------    ---------------------------------------------------------------
         access              Required when not using channelId. This is the platform access 
                             level for the post. (Example: public, private, etc.)
@@ -389,6 +415,9 @@ class PostManager(object):
                 payload[key] = value
 
         res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", data=json.dumps(payload), headers=self.header)    
+        
+        # for testing purposes
+        print(res)
 
         # return post object is found, if not raise Exception
         try:
@@ -768,6 +797,7 @@ class ChannelManager(object):
 
         res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", data=json.dumps(payload), headers=self.header)
         
+        # For testing purposes
         print(res)
 
         # return Channel object is found, if not raise Exception
