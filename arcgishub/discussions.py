@@ -416,7 +416,7 @@ class Channel(OrderedDict):
         }
 
     def __repr__(self):
-        return '<channel_id:%s access:"%s" groups:%s creator:%s>' % (self.id, self.access, self.groups, self.creator)
+        return '<channel_id:%s access:"%s" groups:%s orgs:"%s" creator:%s>' % (self.id, self.access, self.groups, self.orgs self.creator)
 
 
     @property
@@ -482,6 +482,27 @@ class Channel(OrderedDict):
          Returns an array of group Ids used to define "private" channels
         """
         return self.channelProperties['groups']
+    
+    @property
+    def blockWords(self):
+        """
+        Returns an array of phrases and words not allowed in this channel.
+        """
+        return self.channelProperties['blockWords']
+    
+    @property
+    def name(self):
+        """
+        Returns a string of the name of the channel.
+        """
+        return self.channelProperties['name']
+    
+    @property
+    def metadata(self):
+        """
+        Returns an object of the channel's metadata.
+        """
+        return self.channelProperties['metadata']
 
     @property
     def creator(self):
@@ -511,10 +532,11 @@ class Channel(OrderedDict):
         """
         return self.channelProperties['updatedAt']
 
-    def update(self, allowReply=None, allowAnonymous=None, softDelete=None, defaultPostStatus=None, allowReaction=None, allowedReactions=None):
+    def update(self, allowReply=None, allowAnonymous=None, softDelete=None, defaultPostStatus=None, allowReaction=None, allowedReactions=None, blockWords=None, name=None, metadata=None):
         """
         Update a channel by providing the fields that need to be updated. 
         Note: once a channel is created, its access, orgs, and groups configurations cannot be changed
+        TO-DO: check on this note, implemented differently in hub.js and hub-discussions
 
         ================    ===============================================================
         **Argument**        **Description**
@@ -538,6 +560,12 @@ class Channel(OrderedDict):
                             "heart", "one_hundred", "sad", "laughing", "surprised"). 
                             Determines which reactions can be made for posts in channel. 
                             If null, all reactions can be made.
+        ----------------    ---------------------------------------------------------------
+        blockWords          Optional string array.
+        ----------------    ---------------------------------------------------------------
+        name                 Optional string.
+        ----------------    ---------------------------------------------------------------
+        metadata            Optional object.
         ================    ===============================================================        
 
         Usage Example:
@@ -564,6 +592,15 @@ class Channel(OrderedDict):
 
         if allowedReactions:
             payload['allowedReactions'] = allowedReactions
+        
+        if blockWords:
+            payload['blockWords'] = blockWords
+        
+        if name:
+            payload['name'] = name
+            
+        if metadata:
+            payload['metadata'] = metadata
 
         
         url = f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{self.id}"
@@ -670,6 +707,9 @@ class ChannelManager(object):
         groups              Required string array. Array of platform groupIds used to designate 
                             "private" channels
         ----------------    ---------------------------------------------------------------
+        orgs                Required string array. Array of platform orgIds used to designate 
+                            "private" channels
+        ----------------    ---------------------------------------------------------------
         allowReply          Optional boolean, default: true. determines whether replies can 
                             be made to posts.
         ----------------    ---------------------------------------------------------------
@@ -693,9 +733,14 @@ class ChannelManager(object):
                             "thumbs_down", "thinking", "heart", "one_hundred", "sad", 
                             "laughing", "surprised".
         ----------------    ---------------------------------------------------------------
-        blockWords          Optional string array. not yet implemented. In the future, this 
-                            will be used for words or phrases that can be used to automatically 
-                            moderate posts.                
+        blockWords          Optional string array.  is used for words or phrases that can be 
+                            used to automatically moderate posts.   
+        ----------------    ---------------------------------------------------------------
+        name                Optional string. 
+        ----------------    ---------------------------------------------------------------
+        metadata            Optional object.
+        ----------------    ---------------------------------------------------------------
+        channelAclDefinition    Optional object for V1.          
         ================    ===============================================================
 
         EXAMPLE RESPONSE:
@@ -706,21 +751,24 @@ class ChannelManager(object):
         channel = myHub.discussions.channels.add(properties)
         >> <channel_id:"c1f592e6c6a84a37b94613df3683f5e5" access:"private" groups:["3ef"] creator:"prod-pre-hub">
         """
-        if channelProperties['access'] == None or channelProperties['groups'] == None:
-            print('must have both access and groups')
+        if channelProperties['access'] == None or channelProperties['groups'] == None or channelProperties['orgs'] as None:
+            print('must have all access, groups and orgs')
             return 
 
         payload = {
             'access': channelProperties['access'],
-            'groups': channelProperties['groups']
+            'groups': channelProperties['groups'],
+            'orgs': channelProperties['orgs']
         }
 
-        non_optional = ['access', 'groups']
+        non_optional = ['access', 'groups', 'orgs']
         for key, value in channelProperties.items():
             if key not in non_optional:
                 payload[key] = value
 
         res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", data=json.dumps(payload), headers=self.header)
+        
+        print(res)
 
         # return Channel object is found, if not raise Exception
         try:
