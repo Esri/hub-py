@@ -512,6 +512,13 @@ class Channel(OrderedDict):
         """
         return self.channelProperties['groups']
     
+        @property
+    def channelAclDefinition(self):
+        """
+        Returns the channel's channelAclDefinition
+        """
+        return self.channelProperties['channelAclDefinition']
+    
     @property
     def blockWords(self):
         """
