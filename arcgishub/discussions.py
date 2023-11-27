@@ -445,7 +445,7 @@ class Channel(OrderedDict):
         }
 
     def __repr__(self):
-        return '<channel_id:%s access:"%s" groups:%s orgs:"%s" creator:%s>' % (self.id, self.access, self.groups, self.orgs self.creator)
+        return '<channel_id:%s access:"%s" groups:%s orgs:"%s" creator:%s>' % (self.id, self.access, self.groups, self.orgs, self.creator)
 
 
     @property
@@ -512,7 +512,7 @@ class Channel(OrderedDict):
         """
         return self.channelProperties['groups']
     
-        @property
+    @property
     def channelAclDefinition(self):
         """
         Returns the channel's channelAclDefinition
@@ -787,7 +787,7 @@ class ChannelManager(object):
         channel = myHub.discussions.channels.add(properties)
         >> <channel_id:"c1f592e6c6a84a37b94613df3683f5e5" access:"private" groups:["3ef"] creator:"prod-pre-hub">
         """
-        if channelProperties['access'] == None or channelProperties['groups'] == None or channelProperties['orgs'] as None:
+        if channelProperties['access'] == None or channelProperties['groups'] == None or channelProperties['orgs'] == None:
             print('must have all access, groups and orgs')
             return 
 
