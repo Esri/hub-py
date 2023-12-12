@@ -1,7 +1,11 @@
 from collections import OrderedDict
 import requests
 import json
-from arcgishub import hub
+
+"""""
+TODO: change the environment variable its calling on to one of 3: Literal['hubdev.arcgis.com', 'hubqa.arcgis.com', 'hub.arcgis.com']
+"""""
+
 
 class Post(OrderedDict):
     """
@@ -417,7 +421,7 @@ class PostManager(object):
         res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", data=json.dumps(payload), headers=self.header)    
         
         # for testing purposes
-        print(res)
+        print(res.body)
 
         # return post object is found, if not raise Exception
         try:
@@ -743,9 +747,6 @@ class ChannelManager(object):
         groups              Required string array. Array of platform groupIds used to designate 
                             "private" channels
         ----------------    ---------------------------------------------------------------
-        orgs                Required string array. Array of platform orgIds used to designate 
-                            "private" channels
-        ----------------    ---------------------------------------------------------------
         allowReply          Optional boolean, default: true. determines whether replies can 
                             be made to posts.
         ----------------    ---------------------------------------------------------------
@@ -787,25 +788,22 @@ class ChannelManager(object):
         channel = myHub.discussions.channels.add(properties)
         >> <channel_id:"c1f592e6c6a84a37b94613df3683f5e5" access:"private" groups:["3ef"] creator:"prod-pre-hub">
         """
-        if channelProperties['access'] == None or channelProperties['groups'] == None or channelProperties['orgs'] == None:
-            print('must have all access, groups and orgs')
+        if channelProperties['access'] == None or channelProperties['groups'] == None:
+            print('must have both access and groups')
             return 
 
         payload = {
             'access': channelProperties['access'],
-            'groups': channelProperties['groups'],
-            'orgs': channelProperties['orgs']
+            'groups': channelProperties['groups']
         }
 
-        non_optional = ['access', 'groups', 'orgs']
+        non_optional = ['access', 'groups']
         for key, value in channelProperties.items():
             if key not in non_optional:
                 payload[key] = value
 
         res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", data=json.dumps(payload), headers=self.header)
         
-        # For testing purposes
-        print(res)
 
         # return Channel object is found, if not raise Exception
         try:
