@@ -512,8 +512,14 @@ class PageManager(object):
         pagelist = []
 
         if self._site is not None:
-            pages = self._site.definition['values']['pages']
-            items = [self._gis.content.get(page['id']) for page in pages]
+            pages = self._site.definition["values"]["pages"]
+            items = []
+            for page in pages:
+                try:
+                    items.append(self._gis.content.get(page["id"]))
+                except:
+                    # user doesn't have access to a particular page, skip it
+                    pass
         #Build search query
         else:
             query = 'typekeywords:hubPage'
