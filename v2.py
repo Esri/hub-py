@@ -1,11 +1,7 @@
 from collections import OrderedDict
 import requests
 import json
-
-"""""
-TODO: change the environment variable its calling on to one of 3: Literal['hubdev.arcgis.com', 'hubqa.arcgis.com', 'hub.arcgis.com']
-"""""
-
+from arcgishub import hub
 
 class Post(OrderedDict):
     """
@@ -122,6 +118,13 @@ class Post(OrderedDict):
         Returns additional information about the post in specific app context
         """
         return self.postProperties['appInfo']
+    
+    @property
+    def asAnonymous(self):
+        """
+        Returns boolean if the post was made anonymously
+        """
+        return self.postProperties['asAnonymous'] 
 
     @property
     def channelId(self):
@@ -189,7 +192,7 @@ class Post(OrderedDict):
         if appInfo:
             payload['appInfo'] = appInfo
         
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{self.id}"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/posts/{self.id}"
         res = requests.patch(url, data=json.dumps(payload), headers=self.header)
         return Post(self._hub, res.json())
 
@@ -206,7 +209,7 @@ class Post(OrderedDict):
         post.delete()
         >> True
         """
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{self.id}"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/posts/{self.id}"
         res = requests.delete(url, headers=self.header)
         
         if res.json()['success']:
@@ -240,7 +243,7 @@ class Post(OrderedDict):
             'value': value
         }
 
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/reactions"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/reactions"
         res = requests.post(url, headers=self.header, data=json.dumps(payload))
 
         if res.json()['id']:
@@ -270,7 +273,7 @@ class Post(OrderedDict):
         >> True
         """
         
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/reactions/{id}"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/reactions/{id}"
         res = requests.delete(url, headers=self.header)
 
         if res.json()['success']:
@@ -319,9 +322,9 @@ class PostManager(object):
             parameters = {
                 'num': max_posts
             }
-            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", headers=self.header, params=parameters)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/posts", headers=self.header, params=parameters)
         else:
-           res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", headers=self.header) 
+           res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/posts", headers=self.header) 
 
         parsed_posts = res.json()['items']
     
@@ -345,7 +348,7 @@ class PostManager(object):
         post = myHub.discussions.posts.get('itemid12345')
         >> <title:"My Title" creator:prod-pre-hub created:2021-09-04T04:00:18.957Z>
         """
-        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/posts/{id}", headers=self.header)
+        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/posts/{id}", headers=self.header)
         postProperties = res.json()
         return Post(self._hub, postProperties)
 
@@ -355,6 +358,8 @@ class PostManager(object):
 
         ================    ===============================================================
         **Argument**        **Description**
+        ----------------    ---------------------------------------------------------------
+        channelId           Required string. Specifies a channel the post is in.
         ----------------    ---------------------------------------------------------------
         body                Required string. Primary text content of the post
         ----------------    ---------------------------------------------------------------
@@ -377,14 +382,7 @@ class PostManager(object):
         postType            Optional string. Type of post. Current options are "text", 
                             "announcement", "poll", "question"
         ----------------    ---------------------------------------------------------------
-        channelId           Required when not using access and groups. Specifies a channel 
-                            that the post belongs to. Will be required with V2.
-        ----------------    ---------------------------------------------------------------
-        access              Required when not using channelId. This is the platform access 
-                            level for the post. (Example: public, private, etc.)
-        ----------------    ---------------------------------------------------------------
-        groups              Required when not using channelId. This will be an array of 
-                            platform group IDs used to designate private channels.
+        asAnonymous         Optional boolean. Specifies whether or not a post is made anonymously 
         ================    ===============================================================
 
         Usage Example:
@@ -399,29 +397,24 @@ class PostManager(object):
         post = myHub.discussions.posts.add(properties)
         >> <title:"this is my title" creator:prod-pre-hub created:2021-08-25T20:37:20.440Z>
         """
-        if postProperties['body'] == None:
-            raise Exception("Must provide a body for the post!")
+        if postProperties['body'] == None or postProperties['channelId'] == None:
+            raise Exception("Must provide a body and channelId for the post!")
 
         payload = {
             'body': postProperties['body'],
+            'channelId': postProperties['channelId']
         }
 
-        # populate payload based on if channelId or access/groups were provided
-        if ('channelId' in postProperties):
-            payload['channelId'] = postProperties['channelId'] 
-        else:
-            payload['access'] = postProperties['access']
-            payload['groups'] = postProperties['groups']
 
-        non_optional = ['body', 'channelId', 'access', 'groups']
+        non_optional = ['body', 'channelId']
         for key, value in postProperties.items():
             if key not in non_optional:
                 payload[key] = value
 
-        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/posts", data=json.dumps(payload), headers=self.header)    
+        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v2/posts", data=json.dumps(payload), headers=self.header)    
         
         # for testing purposes
-        print(res.body)
+        print(res)
 
         # return post object is found, if not raise Exception
         try:
@@ -449,7 +442,7 @@ class Channel(OrderedDict):
         }
 
     def __repr__(self):
-        return '<channel_id:%s access:"%s" groups:%s orgs:"%s" creator:%s>' % (self.id, self.access, self.groups, self.orgs, self.creator)
+        return '<channel_id:%s creator:%s>' % (self.id, self.creator)
 
 
     @property
@@ -494,27 +487,6 @@ class Channel(OrderedDict):
         Returns the channel's id
         """
         return self.channelProperties['id']
-
-    @property
-    def access(self):
-        """
-        Returns a string that represents the platform level access for the channel
-        """
-        return self.channelProperties['access']
-
-    @property
-    def orgs(self):
-        """
-        Returns an array of org Ids used to define "org" and "public" channels
-        """
-        return self.channelProperties['orgs']
-
-    @property
-    def groups(self):
-        """
-         Returns an array of group Ids used to define "private" channels
-        """
-        return self.channelProperties['groups']
     
     @property
     def channelAclDefinition(self):
@@ -575,8 +547,7 @@ class Channel(OrderedDict):
     def update(self, allowReply=None, allowAnonymous=None, softDelete=None, defaultPostStatus=None, allowReaction=None, allowedReactions=None, blockWords=None, name=None, metadata=None):
         """
         Update a channel by providing the fields that need to be updated. 
-        Note: once a channel is created, its access, orgs, and groups configurations cannot be changed
-        TO-DO: check on this note, implemented differently in hub.js and hub-discussions
+        Updating the ACL will be handled in a different function
 
         ================    ===============================================================
         **Argument**        **Description**
@@ -643,7 +614,7 @@ class Channel(OrderedDict):
             payload['metadata'] = metadata
 
         
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{self.id}"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/channels/{self.id}"
         res = requests.patch(url, data=json.dumps(payload), headers=self.header)
         return Channel(self._hub, res.json())
 
@@ -657,7 +628,7 @@ class Channel(OrderedDict):
         channel.delete()
         >> True
         """
-        url = f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{self.id}"
+        url = f"https://{self._hub._hub_environment}/api/discussions/v2/channels/{self.id}"
         res = requests.delete(url, headers=self.header)
         
         if res.json()['success']:
@@ -705,9 +676,9 @@ class ChannelManager(object):
             parameters = {
                 'num': max_channels
             }
-            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", headers=self.header, params=parameters)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/channels", headers=self.header, params=parameters)
         else: 
-            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", headers=self.header)
+            res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/channels", headers=self.header)
         
         parsed_channels = res.json()['items']
     
@@ -732,7 +703,7 @@ class ChannelManager(object):
         >> <channel_id:"itemid12345" access:"public" groups:[] creator:"prod-pre-hub">
         """
 
-        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v1/channels/{id}", headers=self.header)
+        res = requests.get(f"https://{self._hub._hub_environment}/api/discussions/v2/channels/{id}", headers=self.header)
         channelProperties = res.json()
         return Channel(self._hub, channelProperties)
 
@@ -741,11 +712,7 @@ class ChannelManager(object):
         ================    ===============================================================
         **Argument**        **Description**
         ----------------    ---------------------------------------------------------------
-        access              Required string. Platform level access, can be any of the following:
-                            org, private, public
-        ----------------    ---------------------------------------------------------------
-        groups              Required string array. Array of platform groupIds used to designate 
-                            "private" channels
+        channelAclDefinition Required array. defines the access control for the channel  
         ----------------    ---------------------------------------------------------------
         allowReply          Optional boolean, default: true. determines whether replies can 
                             be made to posts.
@@ -775,35 +742,46 @@ class ChannelManager(object):
         ----------------    ---------------------------------------------------------------
         name                Optional string. 
         ----------------    ---------------------------------------------------------------
-        metadata            Optional object.
-        ----------------    ---------------------------------------------------------------
-        channelAclDefinition    Optional object for V1.          
+        metadata            Optional object.        
         ================    ===============================================================
 
         EXAMPLE RESPONSE:
         properties = {
-            "access": "private",
-            "groups": ["3ef"]
+            "channelAclDefinition": [
+                {
+                    category: AclCategory.GROUP,
+                    subCategory: AclSubCategory.ADMIN,
+                    role: Role.OWNER,
+                    key: 'abc',
+                },
+                {
+                    category: AclCategory.GROUP,
+                    subCategory: AclSubCategory.MEMBER,
+                    role: Role.READWRITE,
+                    key: 'abc',
+                },
+            ],
         }
         channel = myHub.discussions.channels.add(properties)
-        >> <channel_id:"c1f592e6c6a84a37b94613df3683f5e5" access:"private" groups:["3ef"] creator:"prod-pre-hub">
+        >> <channel_id:"c1f592e6c6a84a37b94613df3683f5e5" creator:"prod-pre-hub">
         """
-        if channelProperties['access'] == None or channelProperties['groups'] == None:
-            print('must have both access and groups')
-            return 
+        if channelProperties['channelAclDefinition'] == None:
+            print('must have channelAclDefinition')
+            return
 
         payload = {
-            'access': channelProperties['access'],
-            'groups': channelProperties['groups']
+            'channelAclDefinition': channelProperties['channelAclDefinition'],
         }
 
-        non_optional = ['access', 'groups']
+        non_optional = ['channelAclDefinition']
         for key, value in channelProperties.items():
             if key not in non_optional:
                 payload[key] = value
 
-        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v1/channels", data=json.dumps(payload), headers=self.header)
+        res = requests.post(f"https://{self._hub._hub_environment}/api/discussions/v2/channels", data=json.dumps(payload), headers=self.header)
         
+        # For testing purposes
+        print(res)
 
         # return Channel object is found, if not raise Exception
         try:
@@ -880,7 +858,7 @@ class Reaction(OrderedDict):
         >> True
         """
 
-        res = requests.delete(f"https://{self._hub._hub_environment}/api/discussions/v1/reactions/{id}", headers=self.header)        
+        res = requests.delete(f"https://{self._hub._hub_environment}/api/discussions/v2/reactions/{id}", headers=self.header)        
         if res.json()['success']:
             return True
         return False
