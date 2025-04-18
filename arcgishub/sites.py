@@ -145,6 +145,13 @@ class Site(OrderedDict):
         Return Site catalog groups
         """
         return self.definition['catalog']['groups']
+    
+    @property
+    def catalogV2_groups(self):
+        """
+        Return Site catalogV2 groups
+        """
+        return self.definition['catalogV2']['groups']
 
     @property
     def layout(self):
@@ -208,6 +215,8 @@ class Site(OrderedDict):
         """
         if group_id not in self.catalog_groups:
             self.definition['catalog']['groups'].append(group_id)
+            if group_id not in self.catalogV2_groups:
+                self.definition['catalogV2']['groups'].append(group_id)
             self.item.update(item_properties={'text': self.definition})
             return self.catalog_groups
 
@@ -221,7 +230,10 @@ class Site(OrderedDict):
         ===============     ====================================================================
         """
         if group_id not in self.catalog_groups:
-            raise Exception('Group is not a part of site catalog. Please check the group_id')
+            raise Exception('Group is not a part of site catalog. Please check the group_id')        
+        if group_id in self.catalogV2_groups:
+            self.definition['catalogV2']['groups'] = [group for group in self.catalog_groupsV2 if group!=group_id]
+
         self.definition['catalog']['groups'] = [group for group in self.catalog_groups if group!=group_id]
         self.item.update(item_properties={'text': self.definition})
         return self.catalog_groups
